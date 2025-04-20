@@ -1,0 +1,5 @@
+claw-compiler/build/
+*.o     # 中间文件  
+*.tst   # 测试文件(ELF)
+claw    # 最终编译器名
+
