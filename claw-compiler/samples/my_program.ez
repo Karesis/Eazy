@@ -2,7 +2,7 @@
     print "This is the helper block"
     back
 
-@main:               # <--- 入口点块
+@main:               # <--- entry
     print "Starting main"
     goto helper
     print "Returned from helper"
