@@ -58,5 +58,5 @@
 
 ## 许可证
 
-本项目使用 [MIT](https://github.com/Karesis/Eazy/blob/main/LICENSE)许可证。详见 `License` 文件。
+本项目使用 [MIT](https://github.com/Karesis/Eazy/blob/origin/LICENSE)许可证。详见 `License` 文件。
 
