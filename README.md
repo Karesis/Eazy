@@ -32,8 +32,8 @@
 
 1.  克隆本仓库：
     ```bash
-    git clone <你的 GitHub 仓库 HTTPS 或 SSH 地址>
-    cd <你的仓库目录名，例如 Eazy>
+    git clone https://github.com/Karesis/Eazy.git
+    cd Eazy
     ```
 2.  确保你位于项目的根目录下。
 3.  Lexer 和 Parser 模块位于 `claw-compiler/` 目录中。
@@ -58,5 +58,5 @@
 
 ## 许可证
 
-本项目使用 [许可证名称] 许可证。详见 `License` 文件。
+本项目使用 [MIT](https://github.com/Karesis/Eazy/blob/main/LICENSE)许可证。详见 `License` 文件。
 
