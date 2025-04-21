@@ -1,0 +1,16 @@
+@helper:
+    print "This is the helper block"
+    back
+
+@main:               # <--- 入口点块
+    print "Starting main"
+    goto helper
+    print "Returned from helper"
+    int result
+    result = 10 * 2
+    print result
+    back             # return from main exits the program
+
+@another_block:
+    print "This won't run unless called"
+    back

@@ -1,0 +1,93 @@
+# --- Complex Eazy Example ---
+# A simple program to simulate getting two numbers, calculating their sum,
+# and printing the result.
+
+@main:
+    print "Program starting in main block."
+    int num1     # Declare variable num1 (becomes comment in Python)
+    int num2     # Declare variable num2
+    int sum_res  # Declare variable for the sum result
+    
+    # Initialize variables (In V1, these are local to the 'main' Python function)
+    num1 = 0
+    num2 = 0
+    sum_res = 0
+    
+    print "Variables initialized."
+    goto get_input  # Jump to the block for getting input
+    
+    # --- This part executes *after* get_input returns ---
+    # Note: In V1, 'num1' and 'num2' set in get_input won't be seen here.
+    #       'sum_res' from calculate_sum also won't be seen here.
+    #       This highlights V1's scope limitations.
+    #       We'll print placeholder values here.
+    print "Main: Returned from get_input flow."
+    print "Main: Placeholder values are:"
+    print num1 # Will print 0
+    print num2 # Will print 0
+    
+    print "Program finished in main."
+    back       # Return from main (ends the program execution)
+
+
+@get_input:
+    print "Entering get_input block."
+    # Simulate getting input by assigning fixed values here.
+    # These variables are local to the 'get_input' Python function in V1.
+    int local_num1 
+    int local_num2 
+    local_num1 = 15
+    local_num2 = 27
+    print "Input received (simulated):"
+    print local_num1
+    print local_num2
+    
+    # Now jump to calculate the sum. We can't easily pass values in V1.
+    # calculate_sum will have to define its own numbers for this demo.
+    goto calculate_sum 
+    
+    print "get_input: Returned from calculate_sum." # This might be unreachable depending on calculate_sum
+    back           # Return from get_input
+
+
+@calculate_sum:
+    print "Entering calculate_sum block."
+    # Since we can't easily access num1/num2 from get_input in V1,
+    # we define values here for the calculation demonstration.
+    int calc_a
+    int calc_b
+    int local_sum
+    
+    calc_a = 50 # Use different values for clarity
+    calc_b = 30
+    print "Calculating sum for:"
+    print calc_a
+    print calc_b
+    
+    local_sum = calc_a + calc_b # Perform the addition
+    
+    # Jump to print the result. Again, passing 'local_sum' is tricky in V1.
+    # print_result will have to print its own value or a fixed one.
+    goto print_result
+    
+    print "calculate_sum: Returned from print_result." # Likely unreachable
+    back             # Return from calculate_sum
+
+
+@print_result:
+    print "Entering print_result block."
+    # Cannot easily access 'local_sum' from calculate_sum in V1.
+    # Print a fixed value or a value defined locally here.
+    int final_result 
+    final_result = 80 # The expected sum from calculate_sum (50+30)
+    
+    print "--- Calculation Result ---"
+    print final_result
+    print "--------------------------"
+    
+    # This is the end of this execution path. Return.
+    # Control will go back to the caller of the function that jumped here.
+    # If calculate_sum called us, we return to calculate_sum's context.
+    # If get_input called calculate_sum, return eventually goes back to get_input.
+    # If main called get_input, return eventually goes back to main.
+    back             # Return from print_result

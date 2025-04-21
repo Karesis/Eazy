@@ -15,3 +15,14 @@ print b;
 
 @main:
     goto calculate
+    
+->
+def calculate():
+    a = 10
+    b = a * 5 + 2
+    print(b)
+
+def main():
+    calculate()
+
+main()
