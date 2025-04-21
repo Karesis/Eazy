@@ -1,0 +1,17 @@
+var a;
+var b;
+a = 10;
+b = a * 5 + 2;
+print b;
+
+->
+@calculate:
+    int a
+    int b
+    a = 10
+    b = a * 5 + 2
+    print b
+    back
+
+@main:
+    goto calculate
