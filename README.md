@@ -42,7 +42,7 @@
     python claw-compiler/claw_parser.py
     ```
     (这将运行 `claw_parser.py` 文件末尾的示例代码，输出 Token 列表和解析后的 AST 结构)。
-
+    
 ## 未来计划 (初步)
 
 *   实现代码生成器，将 AST 转换为可执行的 Python 代码。
@@ -58,5 +58,5 @@
 
 ## 许可证
 
-本项目使用 [MIT](https://github.com/Karesis/Eazy/blob/calculator/LICENSE)许可证。详见 `License` 文件。
+本项目使用 [MIT](https://github.com/Karesis/Eazy/blob/calculator/LICENSE)许可证。详见 `LICENSE` 文件。
 
