@@ -1,8 +1,6 @@
-# ast.py (Revised based on simplified V1 strategy)
 from dataclasses import dataclass, field
-from typing import List, Optional
-from claw_lexer import Token # Assuming lexer.py is in the same directory
-
+from typing import List
+from claw_lexer import Token 
 @dataclass
 class ASTNode: # 基类
     pass
@@ -48,6 +46,3 @@ class GotoBlock(BlockContent):
 class BackBlock(BlockContent):
     pass
 
-# 注意：像 'int a' 这样的声明，如果 V1 目标是丢弃它，
-# 那么 Parser 只需要识别并跳过它的 Token，不需要在 AST 中创建节点。
-# 如果将来需要记录，可以再添加 VariableDeclarationBlock(BlockContent)

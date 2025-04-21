@@ -48,13 +48,13 @@ class CodeGenerator:
             python_code_parts.append(f"main()\n")
         elif ast_root.block_definitions:
              # If no 'main' block was found, report error (or choose other fallback)
-             print("Error: Entry point 'main' block not found in the source code.", file=sys.stderr)
-             # Indicate failure - returning None or empty string could signal this
-             # Or raise an exception if preferred
-             return None # Signal generation failure
+            print("Error: Entry point 'main' block not found in the source code.", file=sys.stderr)
+            # Indicate failure - returning None or empty string could signal this
+            # Or raise an exception if preferred
+            return None # Signal generation failure
         else:
              # No blocks defined at all
-             python_code_parts.append("# No blocks defined in the source code.\n")
+            python_code_parts.append("# No blocks defined in the source code.\n")
 
         return "".join(python_code_parts)
 
@@ -96,7 +96,7 @@ class CodeGenerator:
 
         # Handle empty blocks: add 'pass' if no content generated
         if not inner_lines:
-             inner_lines.append("pass\n")
+            inner_lines.append("pass\n")
 
         # Indent the collected inner lines
         indented_inner_code = textwrap.indent("".join(inner_lines), "    ")
@@ -115,9 +115,9 @@ class CodeGenerator:
         # --- Handle Type Declarations (Example: "int a") ---
         # Add other Eazy type keywords as needed (e.g., KEYWORD_STRING)
         if first_token.type == TokenType.KEYWORD_INT and len(node.line_tokens) >= 2:
-             identifier_name = node.line_tokens[1].lexeme
-             # Convert to Python comment (Python 3 type hints are different)
-             return f"# Eazy type hint: int {identifier_name}\n"
+            identifier_name = node.line_tokens[1].lexeme
+            # Convert to Python comment (Python 3 type hints are different)
+            return f"# Eazy type hint: int {identifier_name}\n"
 
         # --- Handle Print Statements ---
         elif first_token.type == TokenType.KEYWORD_PRINT:
