@@ -40,7 +40,7 @@
 1.  克隆仓库：
     ```bash
     # Clone the repository from GitHub
-    git clone [https://github.com/Karesis/Eazy.git](https://github.com/Karesis/Eazy.git)
+    git clone https://github.com/Karesis/Eazy.git
     # Change directory into the cloned project
     cd Eazy
     ```
