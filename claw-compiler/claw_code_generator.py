@@ -1,60 +1,57 @@
 import sys
 import os
-import argparse # For command-line argument parsing
-import textwrap # Helpful for managing indentation
-from typing import Any
+import argparse
+import textwrap
+from typing import Any, List, Optional # Ensure Optional is imported if needed elsewhere
+
+# Assuming claw_ast defines these correctly now
 from claw_ast import Program, BlockDefinition, GenericLineBlock, GotoBlock, BackBlock, ASTNode, BlockContent
-from claw_lexer import Lexer, TokenType
-from claw_parser import Parser 
+# Assuming claw_lexer defines Token and TokenType
+from claw_lexer import Lexer, TokenType, Token # Added Token import
+# Assuming claw_parser defines Parser
+from claw_parser import Parser
 
 
 class CodeGenerator:
     """
     Generates target code (Python functions) from the Eazy AST (V1 Strategy).
+    Handles parameters, arguments, and basic return values.
     Finds the 'main' block for the entry point.
-    Handles simple type declarations by commenting them out.
     """
     def __init__(self):
-        # Stores the generated Python code for each block function
-        self.generated_block_functions_code = []
-        self.main_block_found = False # Flag to track if 'main' block exists
-
-    def generate(self, ast_root: Program) -> str:
-        """Starts the code generation process and assembles the final script."""
-        # Reset state for potentially multiple generations with the same instance
         self.generated_block_functions_code = []
         self.main_block_found = False
 
-        # Visit the root Program node to generate code for all blocks
+    def generate(self, ast_root: Program) -> Optional[str]: # Return Optional[str] to signal failure
+        """Starts the code generation process and assembles the final script."""
+        self.generated_block_functions_code = []
+        self.main_block_found = False
+        source_filename = getattr(ast_root, 'source_filename', 'unknown') # Get filename if attached by parser
+
         self.visit(ast_root)
 
-        # Assemble the final Python script
+        if not self.main_block_found and any(ast_root.block_definitions):
+             print(f"Error: Entry point '@main:' block not found in '{source_filename}'.", file=sys.stderr)
+             return None # Signal generation failure
+
         python_code_parts = [
-            "# Generated Python code from Eazy language (Claw compiler V1)\n",
-            f"# Source file: {getattr(ast_root, 'source_filename', 'unknown')}\n\n", # Add source filename if available
-            "# Generated block functions:\n"
+            f"# Generated Python code from Eazy language (Claw compiler V1)\n",
+            f"# Source file: {source_filename}\n\n",
+            "# === Generated block functions ===\n"
         ]
 
-        # Add all generated function definitions
         for func_code in self.generated_block_functions_code:
             python_code_parts.append(func_code)
-            python_code_parts.append("\n") # Add a blank line between functions
+            python_code_parts.append("\n")
 
         # --- Add the entry point call ---
-        # Logic now specifically looks for 'main' block
         if self.main_block_found:
-            python_code_parts.append(f"# Entry point:\n")
-            # Call the main function
-            python_code_parts.append(f"main()\n")
-        elif ast_root.block_definitions:
-             # If no 'main' block was found, report error (or choose other fallback)
-            print("Error: Entry point 'main' block not found in the source code.", file=sys.stderr)
-            # Indicate failure - returning None or empty string could signal this
-            # Or raise an exception if preferred
-            return None # Signal generation failure
-        else:
-             # No blocks defined at all
+            python_code_parts.append(f"# === Entry point ===\n")
+            python_code_parts.append(f"if __name__ == \"__main__\":\n") # Good practice for Python scripts
+            python_code_parts.append(f"    main()\n")
+        elif not ast_root.block_definitions:
             python_code_parts.append("# No blocks defined in the source code.\n")
+        # else: Error already printed if main not found but blocks exist
 
         return "".join(python_code_parts)
 
@@ -66,83 +63,110 @@ class CodeGenerator:
 
     def visit_ASTNode(self, node: ASTNode):
          """Fallback for unhandled AST node types."""
-         raise NotImplementedError(f"Visitor method not implemented for node type: {type(node).__name__}")
+         # Provide more context in the error message
+         raise NotImplementedError(f"Code Generation not implemented for AST node type: {type(node).__name__}")
 
     # --- Visitor methods for specific AST nodes ---
 
     def visit_Program(self, node: Program):
         """Visits all block definitions within the program."""
-        # Store source filename in AST root if parser adds it, useful for header
-        # setattr(node, 'source_filename', node.filename_if_parser_adds_it)
         for block_def in node.block_definitions:
             self.visit(block_def)
 
     def visit_BlockDefinition(self, node: BlockDefinition):
-        """Generates a Python function for an Eazy block."""
+        """Generates a Python function for an Eazy block, including parameters."""
         function_name = node.name
-        # Check if this is the main block
         if function_name == "main":
             self.main_block_found = True
 
-        # Start the function definition string
-        function_code_lines = [f"def {function_name}():\n"]
+        # --- NEW: Handle parameters ---
+        # Join parameter names (strings) with commas for the function signature
+        params_str = ', '.join(node.parameters)
+        function_signature = f"def {function_name}({params_str}):\n"
+        # --- End NEW ---
 
+        function_code_lines = [function_signature]
         inner_lines = []
-        # Visit each statement/instruction within the block
         for content_node in node.inner_content:
-            line = self.visit(content_node)
-            if line:
-                inner_lines.append(line)
+            # Visit inner content nodes; result could be None, str, or list of strs
+            result = self.visit(content_node)
+            if isinstance(result, str):
+                inner_lines.append(result)
+            elif isinstance(result, list): # Handle cases returning multiple lines if needed
+                 inner_lines.extend(result)
+            # Ignore None results (e.g., from skipped nodes)
 
-        # Handle empty blocks: add 'pass' if no content generated
         if not inner_lines:
             inner_lines.append("pass\n")
 
-        # Indent the collected inner lines
         indented_inner_code = textwrap.indent("".join(inner_lines), "    ")
         function_code_lines.append(indented_inner_code)
 
-        # Store the complete function code
         self.generated_block_functions_code.append("".join(function_code_lines))
 
-    def visit_GenericLineBlock(self, node: GenericLineBlock) -> str:
+    def visit_GenericLineBlock(self, node: GenericLineBlock) -> Optional[str]:
         """Translates a generic line into a Python statement."""
         if not node.line_tokens:
-            return ""
+            return None # Skip empty lines effectively
 
         first_token = node.line_tokens[0]
 
-        # --- Handle Type Declarations (Example: "int a") ---
-        # Add other Eazy type keywords as needed (e.g., KEYWORD_STRING)
+        # --- Handle Type Declarations (Still comment out) ---
         if first_token.type == TokenType.KEYWORD_INT and len(node.line_tokens) >= 2:
+            # Assuming second token is the identifier
             identifier_name = node.line_tokens[1].lexeme
-            # Convert to Python comment (Python 3 type hints are different)
+            # Simple comment for V1
             return f"# Eazy type hint: int {identifier_name}\n"
 
-        # --- Handle Print Statements ---
+        # --- Handle Print Statements (Keep as is) ---
         elif first_token.type == TokenType.KEYWORD_PRINT:
+            # Rebuild the argument string from tokens after 'print'
             if len(node.line_tokens) > 1:
-                # Join arguments with spaces - V1 approximation
+                # TODO: This simple join might not handle complex print arguments correctly later
+                # For V1, join lexemes. Assumes arguments are simple identifiers/literals.
                 args_str = " ".join(t.lexeme for t in node.line_tokens[1:])
-                # Generate Python 3 print()
+                # Generate Python 3 print(). Needs careful handling of quotes if strings are added.
+                # For now, assume no strings need explicit quoting.
                 return f"print({args_str})\n"
             else:
                 return "print()\n" # print with no args
 
-        # --- Handle Other Lines ---
+        # --- Handle Other Lines (Assignments, etc.) ---
         else:
             # Default: Join tokens with spaces. Assumes valid Python when spaced.
+            # TODO: This is a major simplification. Needs real expression parsing/generation later.
             python_line = " ".join(t.lexeme for t in node.line_tokens)
             return python_line + "\n"
 
     def visit_GotoBlock(self, node: GotoBlock) -> str:
-        """Translates 'goto block' to a Python function call."""
+        """Translates 'goto block(arg1, ...)' to a Python function call."""
         function_name = node.target_block_name
-        return f"{function_name}()\n"
+        # --- NEW: Handle arguments ---
+        # Join argument token lexemes with commas for the function call
+        # Assumes lexemes of IDENTIFIERs/NUMBERs are valid Python arguments
+        args_str = ', '.join(arg.lexeme for arg in node.arguments)
+        return f"_tmp_return = {function_name}({args_str})\n"
+        # --- End NEW ---
 
     def visit_BackBlock(self, node: BackBlock) -> str:
-        """Translates 'back' to a Python 'return' statement."""
-        return "return\n"
+        """
+        Translates 'back [val1, val2, ...]' to a Python 'return' statement.
+        V1 Limitation: This generates standard Python return, which does NOT
+        match the Eazy semantic of injecting variables into the caller's scope.
+        """
+        # --- NEW: Handle return values ---
+        if not node.return_values:
+            # No return values -> return (implicitly None in Python)
+            return "return\n"
+        elif len(node.return_values) == 1:
+            # Single return value -> return value_lexeme
+            return f"return {node.return_values[0].lexeme}\n"
+        else:
+            # Multiple return values -> return val1_lexeme, val2_lexeme, ...
+            # Python automatically packs these into a tuple.
+            returns_str = ', '.join(val.lexeme for val in node.return_values)
+            return f"return {returns_str}\n"
+
 
 # --- Main execution block ---
 if __name__ == "__main__":

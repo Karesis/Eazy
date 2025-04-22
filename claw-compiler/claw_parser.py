@@ -81,29 +81,77 @@ class Parser:
 
     # --- Parse a Block Definition ---
     def parse_block_definition(self) -> BlockDefinition:
-        """Parses a block definition: @ IDENTIFIER : NEWLINE { content }."""
-        # Syntax: @ IDENTIFIER :
+        """
+        Parses a block definition: @ IDENTIFIER [(param1, param2, ...)] : NEWLINE { content }.
+        解析块定义：@ 标识符 [(参数1, 参数2, ...)] : 换行 { 内容 }
+        """
+        # Syntax: @ IDENTIFIER
+        # 语法：@ 标识符
         self.consume(TokenType.AT)
         name_token = self.consume(TokenType.IDENTIFIER)
+
+        # --- NEW: Parse Optional Parameter List ---
+        # --- 新增：解析可选的参数列表 ---
+        parameters_list: List[str] = [] # 初始化一个空列表来存储参数名
+        # Check if the next token is '(' indicating a parameter list
+        # 检查下一个 token 是否是 '('，表示有参数列表
+        if self.current_token.type == TokenType.LPAREN:
+            self.consume(TokenType.LPAREN) # Consume '(' / 消耗 '('
+
+            # Check for immediate ')' for empty parameter list like @name()
+            # 检查是否紧跟着 ')'，处理空参数列表如 @name() 的情况
+            if self.current_token.type != TokenType.RPAREN:
+                # If not empty, parse parameters separated by commas
+                # 如果括号内不为空，则解析由逗号分隔的参数
+                while True:
+                    # Expect an identifier for the parameter name
+                    # 期望一个标识符作为参数名
+                    param_token = self.consume(TokenType.IDENTIFIER)
+                    parameters_list.append(param_token.lexeme) # Store the name string / 存储参数名字符串
+
+                    # Check if the next token is a comma or a closing parenthesis
+                    # 检查下一个 token 是逗号还是右括号
+                    if self.current_token.type == TokenType.COMMA:
+                        self.consume(TokenType.COMMA) # Consume ',' and expect another parameter / 消耗 ',' 并期待下一个参数
+                    elif self.current_token.type == TokenType.RPAREN:
+                        # Found ')', end of parameter list
+                        # 遇到了 ')'，参数列表结束
+                        break
+                    else:
+                        # Syntax error if neither ',' nor ')' follows the parameter name
+                        # 如果参数名后面既不是 ',' 也不是 ')'，则为语法错误
+                        self.error(f"Expected ',' or ')' after parameter name '{param_token.lexeme}' in block definition")
+
+            # Consume the closing ')'
+            # 消耗结束的 ')'
+            self.consume(TokenType.RPAREN)
+        # --- End NEW ---
+        # --- 新增逻辑结束 ---
+
+        # Syntax: : (Colon must come after the optional parameter list)
+        # 语法：冒号（必须在可选参数列表之后）
         self.consume(TokenType.COLON)
 
-        block_node = BlockDefinition(name=name_token.value)
+        # Create BlockDefinition node, passing the parsed parameters list
+        # 创建 BlockDefinition 节点，传入解析得到的参数列表
+        # Note: parameters_list will be [] if no LPAREN was found or if () was empty
+        # 注意：如果没有找到 '(' 或者括号内为空，parameters_list 将是 []
+        block_node = BlockDefinition(name=name_token.value, parameters=parameters_list)
 
         # Expect content or newlines after the colon.
+        # 期望冒号后是内容或换行符
         self._skip_newline()
 
-        # Parse lines within the block until the next block definition ('@') or EOF.
+        # --- Parse lines within the block (This part remains unchanged) ---
+        # --- 解析块内部的行（这部分保持不变）---
         while self.current_token.type != TokenType.AT and \
-              self.current_token.type != TokenType.EOF:
+            self.current_token.type != TokenType.EOF:
 
-            # Skip any blank lines within the block.
             self._skip_newline()
 
-            # Check again after skipping newlines, in case we hit the end.
             if self.current_token.type == TokenType.AT or self.current_token.type == TokenType.EOF:
                 break
 
-            # Determine the type of statement on the current line.
             first_token_on_line = self.current_token
 
             if first_token_on_line.type == TokenType.KEYWORD_GOTO:
@@ -113,15 +161,11 @@ class Parser:
                 back_block = self.parse_back_block()
                 block_node.inner_content.append(back_block)
             elif first_token_on_line.type == TokenType.KEYWORD_INT:
-                 # V1: Simply skip variable declaration lines entirely.
                 self._skip_variable_declaration()
-            # TODO: Add label parsing if needed:
-            # elif first_token_on_line.type == TokenType.IDENTIFIER and self.peek(1).type == TokenType.COLON:
-            #     pass # Implement parse_label_block if needed
             else:
-                # Treat other lines as generic statements (assignments, calls, etc.).
                 generic_line_block = self.parse_generic_line_block()
                 block_node.inner_content.append(generic_line_block)
+            # --- End of unchanged part ---
 
         return block_node
 
@@ -161,24 +205,97 @@ class Parser:
 
     # --- Parse Goto Block ---
     def parse_goto_block(self) -> GotoBlock:
-        """Parses a 'goto IDENTIFIER' statement."""
+        """
+        Parses a 'goto IDENTIFIER [(arg1, arg2, ...)]' statement.
+        解析 goto 标识符 [(参数1, 参数2, ...)] 语句。
+        """
         self.consume(TokenType.KEYWORD_GOTO)
         target_token = self.consume(TokenType.IDENTIFIER)
 
-        # Expect a newline or EOF after the goto statement.
+        arguments_list: List[Token] = [] # 初始化参数 Token 列表
+
+        # --- NEW: Parse Optional Argument List ---
+        # --- 新增：解析可选的参数列表 ---
+        # Check if parentheses follow the identifier
+        # 检查标识符后面是否有括号
+        if self.current_token.type == TokenType.LPAREN:
+            self.consume(TokenType.LPAREN) # Consume '(' / 消耗 '('
+
+            # Check for immediate ')' for empty argument list like goto name()
+            # 检查是否紧跟着 ')'，处理空参数列表如 goto name() 的情况
+            if self.current_token.type != TokenType.RPAREN:
+                # If not empty, parse arguments separated by commas
+                # 如果括号内不为空，则解析由逗号分隔的参数
+                while True:
+                    # Expect an identifier or number as argument (initial simplification)
+                    # 期望一个标识符或数字作为参数（初期简化）
+                    # TODO: Later, this should parse expressions
+                    # TODO: 后续这里应该能解析表达式
+                    if self.current_token.type in (TokenType.IDENTIFIER, TokenType.NUMBER):
+                        arg_token = self.consume(self.current_token.type)
+                        arguments_list.append(arg_token) # Store the argument Token / 存储参数 Token
+                    else:
+                        self.error(f"Expected IDENTIFIER or NUMBER as argument in goto, but got {self.current_token.type}")
+
+                    # Check for comma or closing parenthesis
+                    # 检查下一个 token 是逗号还是右括号
+                    if self.current_token.type == TokenType.COMMA:
+                        self.consume(TokenType.COMMA) # Consume ',' and expect another argument / 消耗 ',' 并期待下一个参数
+                    elif self.current_token.type == TokenType.RPAREN:
+                        # Found ')', end of argument list
+                        # 遇到了 ')'，参数列表结束
+                        break
+                    else:
+                        self.error("Expected ',' or ')' after argument in goto statement")
+
+            # Consume the closing ')'
+            # 消耗结束的 ')'
+            self.consume(TokenType.RPAREN)
+        # --- End NEW ---
+        # --- 新增逻辑结束 ---
+
+        # Expect a newline or EOF after the goto statement (and optional arguments)
+        # 期望 goto 语句（及可选参数）后是换行符或文件尾
         self._consume_newline_or_eof("after goto statement")
 
-        return GotoBlock(target_block_name=target_token.value)
+        # Return GotoBlock node with parsed arguments (will be [] if no parentheses were found or they were empty)
+        # 返回 GotoBlock 节点，包含解析出的参数（如果没有括号或括号为空，则为 []）
+        return GotoBlock(target_block_name=target_token.value, arguments=arguments_list)
 
     # --- Parse Back Block ---
     def parse_back_block(self) -> BackBlock:
-        """Parses a 'back' statement."""
-        self.consume(TokenType.KEYWORD_BACK)
-        
-        # Expect a newline or EOF after the back statement.
-        self._consume_newline_or_eof("after back statement")
+        """
+        Parses a 'back [val1, val2, ...]' statement.
+        解析 back [值1, 值2, ...] 语句（值之间用逗号分隔）。
+        """
+        self.consume(TokenType.KEYWORD_BACK) # 消耗 'back'
 
-        return BackBlock()
+        return_values_list: List[Token] = [] # 初始化用于存储返回值 Token 的列表
+
+        # First, check if there is at least one potential value after 'back'.
+        if self.current_token.type not in (TokenType.NEWLINE, TokenType.EOF, TokenType.AT):
+            # If yes, start parsing the first value and potentially more.
+            while True:
+                # Expect an identifier or number as return value (syntactically).
+                # Semantic check for non-literal will be done later.
+                if self.current_token.type == TokenType.IDENTIFIER:
+                    value_token = self.consume(self.current_token.type)
+                    return_values_list.append(value_token) # Add the token to the list / 将 Token 添加到列表
+                else:
+                    # If we expected a value (either the first one, or one after a comma)
+                    # but found something else, it's a syntax error.
+                    self.error(f"Expected IDENTIFIER as return value after 'back' or ',', but got {self.current_token.type}")
+
+                # After parsing a value, check if a comma follows, indicating more values.
+                if self.current_token.type == TokenType.COMMA:
+                    self.consume(TokenType.COMMA) # Consume ',' / 消耗 ','
+                    # Continue the loop to parse the next value
+                else:
+                    # If no comma follows, the list of return values ends here. Break the loop.
+                    break
+
+        self._consume_newline_or_eof("after back statement or return values")
+        return BackBlock(return_values=return_values_list)
 
     # --- Helper to consume NEWLINE after a line block ---
     def _consume_newline_or_eof(self, context: str):
@@ -205,68 +322,95 @@ class Parser:
         if self.current_token.type == TokenType.NEWLINE:
              self.consume(TokenType.NEWLINE)
 
+
 # --- Example Usage ---
 if __name__ == "__main__":
-    # Sample source code to parse.
-    source = """@calculate:
-    int a # Variable declaration (skipped by parser V1)
-    int b # Another variable declaration
-    a = 10 # An assignment statement
-    b = a * 5 + 2
-    print b # A print statement (treated as generic line)
-    back # A back statement
+    # 更新后的示例 Eazy 代码，使用了新语法
+    source = """# New sample Eazy code for testing the updated parser
 
-@main: # Another block definition
-    goto calculate # A goto statement
-    # This is a comment after goto
-    print main_done # Another generic line
+@add(x, y):       # 块定义，带参数
+    int sum
+    sum = x + y    # 假设 GenericLineBlock 能处理
+    print sum
+    back sum        # back 返回单个值
 
-@another_block:
-    # Just a placeholder block
-    back # Last statement
+@process(data, factor): # 另一个带参数的块
+    processed = data * factor
+    desc = "processed_data" # 假设是字符串（虽然lexer还不支持）或变量
+    back processed, desc # back 返回多个值 (假设 desc 是 IDENTIFIER)
 
-"""
+@helper():         # 块定义，带空参数列表 ()
+    print "Helper called"
+    back            # back 无返回值
 
-    # Assumes claw_lexer.py is in the same directory or Python path.
+@simple:           # 块定义，无参数列表
+    print "Simple block"
+    back
+
+@main:             # 入口块
+    int a
+    int result
+    int desc_from_proc
+    a = 10
+    result = 0 # 假设赋值可行
+
+    goto add(a, 5)      # goto 调用，带参数 (标识符, 数字)
+    result = sum
+
+    goto process(result, a) # goto 调用，带参数 (变量)
+    result = processed
+    out = desc
+
+    goto helper()       # goto 调用，带空参数列表 ()
+    goto simple         # goto 调用，无参数列表
+
+    print "Main finished"
+    back"""
+
     from claw_lexer import Lexer
-
     lexer = Lexer(source)
-    tokens = lexer.tokenizer()
+    parser = Parser(lexer.tokenizer())
 
-    # Optional: Print tokens for verification.
-    print("--- Tokens ---")
-    for token in tokens:
-        print(token)
-    print("------------")
-
-    parser = Parser(tokens)
     try:
         ast_tree = parser.parse()
 
-        # Print the generated AST using a simple recursive function.
+        # 更新后的 AST 打印函数，用于显示新字段
         print("\n--- AST ---")
         def print_ast(node, indent=0):
             """Helper function to recursively print the AST structure."""
-            print("  " * indent + f"- {type(node).__name__}", end="")
+            indent_str = "  " * indent
+            node_type_name = type(node).__name__
+            print(indent_str + f"- {node_type_name}", end="")
+
             if isinstance(node, Program):
                 print(f" (blocks: {len(node.block_definitions)})")
                 for block_def in node.block_definitions:
                     print_ast(block_def, indent + 1)
             elif isinstance(node, BlockDefinition):
-                 print(f" (name: {node.name}, inner_content: {len(node.inner_content)})")
-                 for content in node.inner_content:
-                      print_ast(content, indent + 1)
+                # 打印参数列表
+                param_str = ', '.join(node.parameters)
+                print(f" (name: {node.name}, params: [{param_str}], inner_content: {len(node.inner_content)})")
+                for content in node.inner_content:
+                    print_ast(content, indent + 2) # 将块内容再缩进一级
             elif isinstance(node, GenericLineBlock):
-                 # Show the reconstructed text from tokens for generic lines.
-                 lexemes = [t.lexeme for t in node.line_tokens]
-                 print(f" (tokens: {''.join(lexemes)!r})") # Use !r to show quotes clearly
+                # 为了可读性，用空格连接 lexemes
+                lexemes = [t.lexeme for t in node.line_tokens]
+                print(f" (tokens: {' '.join(lexemes)!r})") # 使用 repr() 显示引号
             elif isinstance(node, GotoBlock):
-                 print(f" (target: {node.target_block_name})")
+                # 打印参数列表 (显示 token 的 lexeme)
+                args_str = ', '.join(t.lexeme for t in node.arguments)
+                print(f" (target: {node.target_block_name}, args: [{args_str}])")
             elif isinstance(node, BackBlock):
-                 print() # Type name is sufficient
+                # 打印返回值列表 (显示 token 的 lexeme)
+                ret_str = ', '.join(t.lexeme for t in node.return_values)
+                print(f" (returns: [{ret_str}])") # 即使为空也打印 []
             else:
-                 # Generic fallback for unknown node types.
-                 print(f" (data: {vars(node)})")
+                # 其他未知节点类型的通用后备打印方式
+                # 注意：vars() 对某些内置类型可能无效或不适用
+                try:
+                    print(f" (data: {vars(node)})")
+                except TypeError:
+                    print(f" (value: {node})") # 尝试直接打印节点值
 
         print_ast(ast_tree)
         print("------------")
@@ -274,4 +418,6 @@ if __name__ == "__main__":
     except SyntaxError as e:
         print(f"Parsing failed: {e}")
     except Exception as e:
+         import traceback
          print(f"An unexpected error occurred during parsing: {e}")
+         traceback.print_exc() # 打印详细错误堆栈
