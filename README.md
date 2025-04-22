@@ -10,28 +10,34 @@ This project is partly inspired by C, Python, and Assembly languages, and aspire
 
 ## Current Status
 
-This project is currently in its **early development stage**. A **basic compilation pipeline** enabling the translation of **currently supported Eazy language features** into runnable Python code has been **established and verified through testing**.
+This project is currently in its **early development stage**. A basic compilation pipeline enabling the translation of currently supported Eazy language features into runnable Python code has been established and verified through testing.
 
 Completed work includes:
 
-* **Lexer:** Capable of breaking down Eazy source code into a sequence of Tokens.
-* **Parser (V1):** Capable of identifying top-level block definitions (`@name:`) and basic inner blocks (`goto`, `back`, and generic line blocks), and building a preliminary Abstract Syntax Tree (AST). This version of the Parser treats most lines as generic line blocks without deep parsing (e.g., assignments, print arguments are not fully analyzed as expressions). Variable declarations (`int`) are currently skipped.
-* **Code Generator (V1):** Implemented to translate the V1 AST into executable Python 3 code. Each Eazy block is translated into a Python function, `goto` calls the target function, and `back` becomes a `return` statement. The compiler now takes an Eazy source file (`.ez`) as input and outputs a Python file (`.py`).
+* **Lexer:** Capable of breaking down Eazy source code into a sequence of Tokens (including `@`, `:`, `goto`, `back`, `int`, identifiers, numbers, basic operators, and parentheses `( ) ,`).
+* **Parser (V1 - Enhanced):** Capable of identifying top-level block definitions with optional parameters (`@name(p1, p2):`), `goto` statements with optional arguments (`goto name(a1, 5)`), `back` statements with optional multiple return values (`back r1, r2`), and generic line blocks. It builds an Abstract Syntax Tree (AST) reflecting these structures. Variable declarations (`int`) are currently skipped (treated as comments in generated code).
+* **Code Generator (V1 - Enhanced):** Implemented to translate the enhanced AST into executable Python 3 code. Each Eazy block becomes a Python function with corresponding parameters. `goto` becomes a Python function call assigned to a temporary variable `_tmp_return`. `back` becomes a Python `return` statement (returning single values or tuples for multiple values). The compiler takes an Eazy source file (`.ez`) as input and outputs a Python file (`.py`).
+* **V1 Return Value Simulation:** Please note that the V1 Code Generator uses a temporary variable (`_tmp_return`) to capture the result of a `goto` call (which translates to a Python function call). To use the returned value(s) in the **current V1 transpiled Python output**, subsequent Eazy code needs to be written to reference this `_tmp_return` variable (and potentially unpack it if multiple values are returned) instead of directly using the variable names specified in the `back` statement. This is a V1 workaround necessary due to the difference between Eazy's intended "value injection" semantics and Python's standard function return mechanism.
 
-**Important Limitation:**
+## Important Limitation
 
-Please note that the current V1 code generator translates Eazy's `goto block_name` directly into a Python function call (`block_name()`). This means simple Eazy structures, such as `@a: goto b` followed by `@b: goto a`, will result in infinite recursion and eventually cause a stack overflow error when the generated Python code is executed.
+Please note that the current V1 code generator translates Eazy's `goto block_name(...)` directly into a Python function call (`_tmp_return = block_name(...)`). This means simple Eazy structures creating direct mutual recursion (e.g., `@a: goto b` followed by `@b: goto a`) will result in infinite recursion and eventually cause a stack overflow error when the generated Python code is executed.
 
-This is a known limitation of the current transpilation approach. The planned Eazy language execution model will include more sophisticated control flow management mechanisms (e.g., privilege-based jump control and state tracking) to prevent or properly handle such uncontrolled jumps, but these are not yet implemented in the current Claw compiler V1. Therefore, writing Eazy code that creates direct circular `goto` jumps should be avoided with the current V1 implementation.
+Additionally, the V1 code generator's handling of return values is a **simulation**, as described in the "Current Status" section. The Eazy code calling a `goto` must explicitly use the `_tmp_return` variable (potentially unpacking it) to access the results. This differs from the target Eazy semantic where returned variables are intended to become directly available by name in the caller's scope. This unique semantic, along with sophisticated control flow, will require a more advanced backend beyond the current V1 Python transpiler.
 
-## Core Concepts (Current Understanding)
+The planned Eazy language execution model will include more sophisticated control flow management mechanisms (e.g., the planned "Flow" and "Privilege" systems) to prevent or properly handle such uncontrolled jumps and implement the intended return value semantics, but these are not yet implemented in the current Claw compiler V1.
+
+## Core Concepts (Current Design)
 
 * **Everything is a Block:** The fundamental unit of code organization is a block.
-* **Inter-Block Control Flow:** Primarily achieved through `goto` and `back` instructions for jumps and returns between blocks.
-* **Named Blocks (`@name:`):** Top-level block definitions with a name.
-* **Line Blocks:** Single-line operations within a block, such as assignments, print statements, control flow instructions, etc.
+* **Named Blocks (`@name:` or `@name(...)`):** Top-level block definitions with a name. Can optionally define parameters.
+* **Parameters:** Blocks can define named parameters (`@name(param1, param2):`) to receive input values when called via `goto`.
+* **Arguments:** `goto` statements can pass arguments (`goto name(arg1, 5)`) to the target block's parameters.
+* **Return Values:** `back` statements can return zero (`back`), one (`back result`), or multiple values (`back val1, val2`) to the caller context. (V1 simulates this via Python's `return` and requires caller adaptation using `_tmp_return`).
+* **Inter-Block Control Flow:** Primarily achieved through `goto` (with arguments) and `back` (with return values).
+* **Line Blocks:** Single-line operations within a block, such as assignments, print statements, control flow instructions, etc. (Currently parsed as `GenericLineBlock`).
 
-*(Note: These concepts are subject to evolution as the language design progresses)*
+*(Note: These concepts, especially regarding execution semantics like return values and control flow, are subject to evolution as the language design and compiler backend progresses beyond V1.)*
 
 ## How to Build and Run (Current)
 
@@ -51,156 +57,88 @@ This project requires Python 3.6 or higher to run the current compiler executabl
     ```bash
     # Run the code generator script with the input Eazy file
     # Specify the output Python file using -o
-    python claw-compiler/claw_code_generator.py claw-compiler/samples/my_program.ez -o claw-compiler/samples/my_program.py
+    python claw-compiler/claw_code_generator.py claw-compiler/samples/your_test.ez -o claw-compiler/samples/your_test.py
 
     # Or use the default output name (input filename with .py extension)
-    python claw-compiler/claw_code_generator.py claw-compiler/samples/my_program.ez
-    # This will generate my_program.py in the same directory as the input.
+    python claw-compiler/claw_code_generator.py claw-compiler/samples/your_test.ez
+    # This will generate your_test.py in the same directory as the input.
     ```
-    Replace `my_program.ez` with the path to your Eazy source file. The `-o` flag is optional to specify the output file path.
+    Replace `your_test.ez` with the path to your Eazy source file. The `-o` flag is optional to specify the output file path.
 5.  **Run the generated Python code:**
     Execute the generated `.py` file directly using the Python interpreter.
     ```bash
     # Execute the generated Python script
-    python claw-compiler/samples/my_program.py
+    python claw-compiler/samples/your_test.py
     ```
-    You should see the output from the Eazy program's execution.
+    You should see the output from the Eazy program's execution (keeping in mind the V1 limitations).
 
-## Examples
+## Example: Parameters and Return Values
 
-Here are a few simple examples demonstrating the current capabilities of the Eazy language and Claw compiler V1.
-
-### Example 1: Simple Block Call (`my_program.ez`)
+Here is an example demonstrating parameters, arguments, and return values (including the necessary V1 adaptation for using return values).
 
 ```eazy
-@helper:
-    print "This is the helper block"
-    back
+# file: parameter_test.ez
+# Demonstrates parameters, arguments, and return values
 
-@main:               # <--- entry point for execution
-    print "Starting main"
-    goto helper      # Jump to the helper block
-    print "Returned from helper"
-    int result       # Declare variable (currently skipped by parser V1)
-    result = 10 * 2  # Assignment (treated as generic line block)
-    print result     # Print the result
-    back             # Return from main, exiting the program
+@add(x, y):       # Block with parameters
+    int sum
+    sum = x + y    # Basic operation
+    print sum
+    back sum        # Back with single return value
 
-@another_block:
-    print "This won't run unless called via goto"
+@process(data, factor): # Another block with params
+    int processed
+    int desc
+    processed = data * factor
+    # Note: String literals not yet supported by Lexer/Parser V1
+    # Using an int assignment here for demonstration
+    desc = 101 # Placeholder for "processed_data" concept
+    back processed, desc # Back with multiple return values
+
+@helper():         # Block with explicit empty parameters
+    print "Helper called"
+    back            # Back with no return value
+
+@main:             # Entry point
+    int a = 10      # Declare and initialize
+    int result = 0
+    int desc_val = 0 # Variable to hold description value
+    # V1 Workaround: Declare temporary variables needed for multi-return unpacking
+    int temp_p
+    int temp_d
+
+    goto add(a, 5)      # Call add
+    # V1: Must use _tmp_return to get 'sum'
+    result = _tmp_return
+    print result        # Expected output: 15
+
+    goto process(result, a) # Call process
+    # V1: Must use _tmp_return (a tuple) to get 'processed', 'desc'
+    # Need Eazy syntax or multi-step assignment to unpack.
+    # Assuming a hypothetical multi-assignment syntax for Eazy V1 demo:
+    temp_p, temp_d = _tmp_return # Assign tuple to temps
+    result = temp_p              # Assign from temp
+    desc_val = temp_d            # Assign from temp
+    print result        # Expected output: 150 (15 * 10)
+    print desc_val      # Expected output: 101
+
+    goto helper()       # Call helper
+    # _tmp_return might be None or unchanged after helper returns.
+    # Eazy needs rules for handling calls that don't return values.
+
+    print "Main finished"
     back
 ```
 
-This example shows basic block definition, `goto`, `back`, and `print`.
-
-### Example 2: A More Complex Flow (`a_little_complex.ez`)
-
-```eazy
-# --- Complex Eazy Example ---
-# A simple program to simulate getting two numbers, calculating their sum,
-# and printing the result. Demonstrates V1 limitations regarding scope.
-
-@main:
-    print "Program starting in main block."
-    int num1     # Declare variable num1 (becomes comment in Python via V1)
-    int num2     # Declare variable num2
-    int sum_res  # Declare variable for the sum result
-
-    # Initialize variables (In V1, these are local to the 'main' Python function)
-    num1 = 0
-    num2 = 0
-    sum_res = 0
-
-    print "Variables initialized."
-    goto get_input  # Jump to the block for getting input
-
-    # --- This part executes *after* get_input flow potentially returns ---
-    # Note: In V1, 'num1' and 'num2' set in get_input won't be seen here
-    # because Python functions have local scope. 'sum_res' from
-    # calculate_sum also won't be accessible here for the same reason.
-    # This highlights V1's scope limitations due to Python function mapping.
-    print "Main: Returned from get_input flow (or subsequent returns)."
-    print "Main: Values in main's scope are:"
-    print num1 # Will print the initial value 0
-    print num2 # Will print the initial value 0
-
-    print "Program finished in main."
-    back       # Return from main (ends the program execution)
-
-
-@get_input:
-    print "Entering get_input block."
-    # Simulate getting input by assigning fixed values here.
-    # These variables are local to the 'get_input' Python function in V1.
-    int local_num1
-    int local_num2
-    local_num1 = 15
-    local_num2 = 27
-    print "Input received (simulated):"
-    print local_num1
-    print local_num2
-
-    # Jump to calculate the sum. Cannot easily pass V1 local variables.
-    # calculate_sum will have to define its own numbers for this demo.
-    goto calculate_sum
-
-    # This print statement might be unreachable if calculate_sum doesn't return
-    # directly or indirectly back here. Python's call stack manages returns.
-    print "get_input: Returned from calculate_sum."
-    back           # Return from get_input (goes back to the caller, main in this path)
-
-
-@calculate_sum:
-    print "Entering calculate_sum block."
-    # Since we can't easily access num1/num2 from get_input in V1's scope model,
-    # define local values here for the calculation demonstration.
-    int calc_a
-    int calc_b
-    int local_sum
-
-    calc_a = 50 # Use different values for clarity
-    calc_b = 30
-    print "Calculating sum for:"
-    print calc_a
-    print calc_b
-
-    local_sum = calc_a + calc_b # Perform the addition
-
-    # Jump to print the result. Again, passing 'local_sum' is not directly
-    # supported by the current V1 translation mechanism's scope handling.
-    # print_result will print a value based on its own local context.
-    goto print_result
-
-    # This print statement is likely unreachable.
-    print "calculate_sum: Returned from print_result."
-    back             # Return from calculate_sum (goes back to the caller, get_input)
-
-
-@print_result:
-    print "Entering print_result block."
-    # Cannot easily access 'local_sum' from calculate_sum in V1.
-    # Print a fixed value or a value defined locally here.
-    int final_result
-    final_result = 80 # The expected sum from calculate_sum's local values (50+30)
-
-    print "--- Calculation Result ---"
-    print final_result
-    print "--------------------------"
-
-    # This is the end of this execution path initiated by the goto from calculate_sum.
-    # 'back' returns control to the caller function in the Python call stack.
-    # If calculate_sum called us, we return to calculate_sum's context.
-    back             # Return from print_result (goes back to the caller, calculate_sum)
-```
-
-This example demonstrates a more complex flow involving multiple blocks and nested jumps/returns, highlighting the current scope limitations due to the Python function-based translation.
+This example shows how blocks can define and receive parameters, and how `goto` passes arguments. It also demonstrates `back` returning single or multiple values. **Note:** The comments highlight where the Eazy code needs adaptation (using `_tmp_return` and potential unpacking) to work correctly with the **current V1 Python code generator's simulation** of return values. The final Eazy language aims for more direct access to returned values.
 
 ## Future Plans (Preliminary)
 
-* Gradually enhance the Parser to handle more complex line block structures (expressions, function calls, variable scopes, etc.).
-* Design and finalize the complete specification for the Eazy language, including proper scope and control flow rules.
+* Gradually enhance the Parser to handle more complex line block structures (expressions, proper variable scopes, etc.).
+* Design and implement the "Flow" and "Privilege" concepts for advanced control flow and state management.
+* Design and finalize the complete specification for the Eazy language, including precise rules for scope, execution model, and the intended return value mechanism.
 * Develop a semantic analyzer and potentially an optimizer.
-* Improve the Code Generator or develop new backends (e.g., targeting C or LLVM).
+* Improve the Code Generator or develop new backends (e.g., targeting C, LLVM, or a custom bytecode VM) to better support Eazy's unique semantics.
 * Achieve self-compilation capability.
 * Begin development of the Neko kernel and Nya shell based on the Eazy language.
 

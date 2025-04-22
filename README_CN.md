@@ -14,24 +14,30 @@
 
 已完成的工作包括：
 
-* **词法分析器 (Lexer):** 能够将 Eazy 源代码分解为 Token 序列。
-* **语法分析器 (Parser V1):** 能够识别顶层块定义 (`@name:`) 和基本的内部块（`goto`、`back` 以及通用的行块），并构建初步的抽象语法树 (AST)。此版本的解析器将大多数行视为通用行块，未进行深度解析（例如，赋值、打印参数未被完全分析为表达式）。变量声明 (`int`) 目前会被跳过。
-* **代码生成器 (Code Generator V1):** 已实现将 V1 AST 翻译为可执行的 Python 3 代码。每个 Eazy 块被翻译成一个 Python 函数，`goto` 调用目标函数，`back` 变为 `return` 语句。编译器现在以 Eazy 源文件 (`.ez`) 作为输入，并输出一个 Python 文件 (`.py`)。
+* **词法分析器 (Lexer):** 能够将 Eazy 源代码分解为 Token 序列（包括 `@`, `:`, `goto`, `back`, `int`, 标识符, 数字, 基本运算符, 以及括号 `( ) ,`）。
+* **语法分析器 (Parser V1 - 已增强):** 能够识别带可选参数的顶层块定义 (`@name(p1, p2):`)、带可选参数的 `goto` 语句 (`goto name(a1, 5)`)、带可选多个返回值的 `back` 语句 (`back r1, r2`) 以及通用的行块。它能构建反映这些结构的抽象语法树 (AST)。变量声明 (`int`) 目前会被跳过（在生成的代码中转为注释）。
+* **代码生成器 (Code Generator V1 - 已增强):** 已实现将增强后的 AST 翻译为可执行的 Python 3 代码。每个 Eazy 块被翻译成带相应参数的 Python 函数。`goto` 变为赋值给临时变量 `_tmp_return` 的 Python 函数调用。`back` 变为 Python 的 `return` 语句（返回单个值或包含多个值的元组）。编译器现在以 Eazy 源文件 (`.ez`) 作为输入，并输出一个 Python 文件 (`.py`)。
+* **V1 返回值模拟:** 请注意，V1 代码生成器使用一个临时变量 (`_tmp_return`) 来捕获 `goto` 调用（即 Python 函数调用）的结果。为了在**当前 V1 转译出的 Python 输出**中使用返回值，后续的 Eazy 代码需要引用这个 `_tmp_return` 变量（如果返回多个值，可能还需要解包）来访问结果，而不是直接使用 `back` 语句中的变量名。这是 V1 的一个变通方法，因为 Eazy 目标中的“值注入”语义与 Python 的标准函数返回机制不同。
 
-**重要限制 (Important Limitation):**
+## 重要限制 (Important Limitation)
 
-请注意，当前的 V1 代码生成器将 Eazy 中的 `goto block_name` 直接翻译为 Python 中的函数调用 (`block_name()`)。这意味着简单的 Eazy 结构，例如 `@a: goto b` 紧随 `@b: goto a`，在生成的 Python 代码执行时会导致无限递归，并最终引发栈溢出错误 (stack overflow error)。
+请注意，当前的 V1 代码生成器将 Eazy 中的 `goto block_name(...)` 直接翻译为 Python 中的函数调用 (`_tmp_return = block_name(...)`)。这意味着简单的 Eazy 结构，例如 `@a: goto b` 紧随 `@b: goto a`，在生成的 Python 代码执行时仍然会导致无限递归，并最终引发栈溢出错误 (stack overflow error)。
 
-这是当前转译 (transpilation) 方法的一个已知限制。规划中的 Eazy 语言执行模型将包含更复杂的控制流管理机制（例如基于权限的跳转控制和状态跟踪），以防止或正确处理此类不受控制的跳转，但这些机制尚未在当前的 Claw 编译器 V1 中实现。因此，在当前的 V1 实现下，需要避免编写会产生直接循环 `goto` 跳转的 Eazy 代码。
+此外，如“当前状态”部分所述，V1 代码生成器对返回值的处理是一种**模拟**。它将 `goto block(...)` 翻译为 `_tmp_return = block(...)`，将 `back val1, val2` 翻译为 `return val1, val2`。调用 `goto` 的 Eazy 代码必须显式使用 `_tmp_return` 变量（并可能解包）来访问结果。这与目标的 Eazy 语义（即返回的变量按名称在调用者作用域中直接可用）不同。这种独特的语义以及复杂的控制流，将需要一个超越当前 V1 Python 转译器的更高级的后端。
 
-## 核心概念（当前理解）(Core Concepts - Current Understanding)
+规划中的 Eazy 语言执行模型将包含更复杂的控制流管理机制（例如规划中的“流”和“权级”系统）来防止或正确处理此类不受控制的跳转，并实现预期的返回值语义，但这些机制尚未在当前的 Claw 编译器 V1 中实现。
+
+## 核心概念（当前设计）(Core Concepts - Current Design)
 
 * **万物皆块 (Everything is a Block):** 代码组织的基本单元是块。
-* **块间控制流 (Inter-Block Control Flow):** 主要通过 `goto` 和 `back` 指令实现块之间的跳转和返回。
-* **命名块 (`@name:`):** 带有名称的顶层块定义。
-* **行块 (Line Blocks):** 块内的单行操作，如赋值、打印语句、控制流指令等。
+* **命名块 (`@name:` 或 `@name(...)`):** 带名称的顶层块定义。可以（可选地）定义参数。
+* **参数 (Parameters):** 块可以通过 `@name(param1, param2):` 定义命名参数，以接收通过 `goto` 调用传入的值。
+* **参数 (Arguments):** `goto` 语句可以通过 `goto name(arg1, 5)` 将参数传递给目标块的参数。
+* **返回值 (Return Values):** `back` 语句可以返回零个 (`back`)、一个 (`back result`) 或多个值 (`back val1, val2`) 给调用者上下文。（V1 通过 Python 的 `return` 模拟，并需要调用者使用 `_tmp_return` 来适配）。
+* **块间控制流 (Inter-Block Control Flow):** 主要通过 `goto` (带参数) 和 `back` (带返回值) 指令实现块之间的跳转和返回。
+* **行块 (Line Blocks):** 块内的单行操作，如赋值、打印语句、控制流指令等。（目前解析为 `GenericLineBlock`）。
 
-*(注意：随着语言设计的进展，这些概念可能会演变)*
+*(注意：这些概念，特别是关于返回值、控制流等执行语义，随着语言设计和编译器后端 V1 之后的进展，可能会演变)*
 
 ## 如何构建和运行（当前）(How to Build and Run - Current)
 
@@ -49,178 +55,91 @@
 4.  **将 Eazy 源文件编译为 Python 文件：**
     将 `claw_code_generator.py` 作为命令行工具使用。
     ```bash
-    # Run the code generator script with the input Eazy file
-    # Specify the output Python file using -o
-    python claw-compiler/claw_code_generator.py claw-compiler/samples/my_program.ez -o claw-compiler/samples/my_program.py
+    # 使用输入 Eazy 文件运行代码生成器脚本
+    # 使用 -o 指定输出 Python 文件
+    python claw-compiler/claw_code_generator.py claw-compiler/samples/your_test.ez -o claw-compiler/samples/your_test.py
 
-    # Or use the default output name (input filename with .py extension)
-    python claw-compiler/claw_code_generator.py claw-compiler/samples/my_program.ez
-    # 这将在与输入文件相同的目录下生成 my_program.py。
+    # 或使用默认输出名称（输入文件名加 .py 后缀）
+    python claw-compiler/claw_code_generator.py claw-compiler/samples/your_test.ez
+    # 这将在与输入文件相同的目录下生成 your_test.py。
     ```
-    将 `my_program.ez` 替换为您的 Eazy 源文件的路径。`-o` 标志是可选的，用于指定输出文件路径。
+    将 `your_test.ez` 替换为您的 Eazy 源文件的路径。`-o` 标志是可选的，用于指定输出文件路径。
 5.  **运行生成的 Python 代码：**
     使用 Python 解释器直接执行生成的 `.py` 文件。
     ```bash
-    # Execute the generated Python script
-    python claw-compiler/samples/my_program.py
+    # 执行生成的 Python 脚本
+    python claw-compiler/samples/your_test.py
     ```
-    您应该能看到 Eazy 程序执行的输出。
+    您应该能看到 Eazy 程序执行的输出（请注意 V1 的限制）。
 
 ## 示例 (Examples)
 
-这里有几个简单的示例，展示了 Eazy 语言和 Claw 编译器 V1 当前的功能。
+### 示例：参数与返回值 (`parameter_test.ez`)
 
-### 示例 1: 简单的块调用 (`my_program.ez`)
+下面是一个演示参数、参数和返回值（包括必要的 V1 返回值适配）的示例。
 
 ```eazy
-@helper:
-    print "This is the helper block"
-    back
+# file: parameter_test.ez
+# 演示参数、参数和返回值
 
-@main:               # <--- entry point for execution (执行入口点)
-    print "Starting main"
-    goto helper      # Jump to the helper block (跳转到 helper 块)
-    print "Returned from helper"
-    int result       # Declare variable (currently skipped by parser V1) (声明变量，当前被 V1 解析器跳过)
-    result = 10 * 2  # Assignment (treated as generic line block) (赋值，被视为通用行块)
-    print result     # Print the result (打印结果)
-    back             # Return from main, exiting the program (从 main 返回，退出程序)
+@add(x, y):       # 带参数的块
+    int sum
+    sum = x + y    # 基本操作
+    print sum
+    back sum        # 返回单个值
 
-@another_block:
-    print "This won't run unless called via goto"
+@process(data, factor): # 另一个带参数的块
+    int processed
+    int desc
+    processed = data * factor
+    # 注意：字符串字面量 V1 暂不支持
+    # 这里用整数赋值作为演示
+    desc = 101 # 代表 "processed_data" 概念的占位符
+    back processed, desc # 返回多个值
+
+@helper():         # 带空参数列表的块
+    print "Helper called"
+    back            # 无返回值
+
+@main:             # 入口块
+    int a = 10      # 声明并初始化
+    int result = 0
+    int desc_val = 0 # 用于保存描述值的变量
+    # V1 变通需要：声明用于多返回值解包的临时变量 (如果 Eazy V1 不直接支持解包)
+    int temp_p
+    int temp_d
+
+    goto add(a, 5)      # 调用 add
+    # V1: 必须使用 _tmp_return 获取 'sum' 的值
+    result = _tmp_return
+    print result        # 预期输出: 15
+
+    goto process(result, a) # 调用 process
+    # V1: 必须使用 _tmp_return (一个元组) 获取 'processed', 'desc' 的值
+    # 需要 Eazy 语法或分步赋值来解包
+    # 假设 Eazy V1 需要分步或有特定解包语法:
+    temp_p, temp_d = _tmp_return # 假设 Eazy 能将元组解包给临时变量
+    result = temp_p              # 从临时变量赋值
+    desc_val = temp_d            # 从临时变量赋值
+    print result        # 预期输出: 150 (15 * 10)
+    print desc_val      # 预期输出: 101
+
+    goto helper()       # 调用 helper
+    # helper 不返回值, _tmp_return 的值可能变为 None 或保持不变 (需规则定义)
+
+    print "Main finished"
     back
 ```
 
-此示例展示了基本的块定义、`goto`、`back` 和 `print`。
-
-### 示例 2: 更复杂的流程 (`a_little_complex.ez`)
-
-```eazy
-# --- Complex Eazy Example ---
-# A simple program to simulate getting two numbers, calculating their sum,
-# and printing the result. Demonstrates V1 limitations regarding scope.
-# (一个模拟获取两个数字、计算它们的和并打印结果的简单程序。演示 V1 在作用域方面的限制。)
-
-@main:
-    print "Program starting in main block."
-    int num1     # Declare variable num1 (becomes comment in Python via V1) (声明变量 num1，在 V1 中转译为 Python 注释)
-    int num2     # Declare variable num2
-    int sum_res  # Declare variable for the sum result
-
-    # Initialize variables (In V1, these are local to the 'main' Python function)
-    # (初始化变量，在 V1 中，它们是 'main' Python 函数的局部变量)
-    num1 = 0
-    num2 = 0
-    sum_res = 0
-
-    print "Variables initialized."
-    goto get_input  # Jump to the block for getting input (跳转到获取输入的块)
-
-    # --- This part executes *after* get_input flow potentially returns ---
-    # Note: In V1, 'num1' and 'num2' set in get_input won't be seen here
-    # because Python functions have local scope. 'sum_res' from
-    # calculate_sum also won't be accessible here for the same reason.
-    # This highlights V1's scope limitations due to Python function mapping.
-    # (--- 这部分在 get_input 流程可能返回后执行 ---)
-    # (注意：在 V1 中，由于 Python 函数具有局部作用域，这里看不到在 get_input 中设置的 'num1' 和 'num2'。)
-    # (出于同样原因，来自 calculate_sum 的 'sum_res' 在这里也无法访问。)
-    # (这突显了由于 Python 函数映射导致的 V1 作用域限制。)
-    print "Main: Returned from get_input flow (or subsequent returns)."
-    print "Main: Values in main's scope are:"
-    print num1 # Will print the initial value 0 (将打印初始值 0)
-    print num2 # Will print the initial value 0 (将打印初始值 0)
-
-    print "Program finished in main."
-    back       # Return from main (ends the program execution) (从 main 返回，结束程序执行)
-
-
-@get_input:
-    print "Entering get_input block."
-    # Simulate getting input by assigning fixed values here.
-    # These variables are local to the 'get_input' Python function in V1.
-    # (通过在此处赋固定值来模拟获取输入。)
-    # (在 V1 中，这些变量是 'get_input' Python 函数的局部变量。)
-    int local_num1
-    int local_num2
-    local_num1 = 15
-    local_num2 = 27
-    print "Input received (simulated):"
-    print local_num1
-    print local_num2
-
-    # Jump to calculate the sum. Cannot easily pass V1 local variables.
-    # calculate_sum will have to define its own numbers for this demo.
-    # (跳转去计算总和。无法轻易传递 V1 的局部变量。)
-    # (calculate_sum 将不得不为此演示定义自己的数字。)
-    goto calculate_sum
-
-    # This print statement might be unreachable if calculate_sum doesn't return
-    # directly or indirectly back here. Python's call stack manages returns.
-    # (如果 calculate_sum 不直接或间接返回到这里，这条打印语句可能无法到达。Python 的调用栈管理返回。)
-    print "get_input: Returned from calculate_sum."
-    back           # Return from get_input (goes back to the caller, main in this path) (从 get_input 返回，回到此路径中的调用者 main)
-
-
-@calculate_sum:
-    print "Entering calculate_sum block."
-    # Since we can't easily access num1/num2 from get_input in V1's scope model,
-    # define local values here for the calculation demonstration.
-    # (由于在 V1 的作用域模型中无法轻易访问来自 get_input 的 num1/num2，)
-    # (在此处定义局部值用于计算演示。)
-    int calc_a
-    int calc_b
-    int local_sum
-
-    calc_a = 50 # Use different values for clarity (使用不同的值以便区分)
-    calc_b = 30
-    print "Calculating sum for:"
-    print calc_a
-    print calc_b
-
-    local_sum = calc_a + calc_b # Perform the addition (执行加法)
-
-    # Jump to print the result. Again, passing 'local_sum' is not directly
-    # supported by the current V1 translation mechanism's scope handling.
-    # print_result will print a value based on its own local context.
-    # (跳转去打印结果。同样，当前 V1 翻译机制的作用域处理不直接支持传递 'local_sum'。)
-    # (print_result 将根据其自身的局部上下文打印一个值。)
-    goto print_result
-
-    # This print statement is likely unreachable. (这条打印语句很可能无法到达。)
-    print "calculate_sum: Returned from print_result."
-    back             # Return from calculate_sum (goes back to the caller, get_input) (从 calculate_sum 返回，回到调用者 get_input)
-
-
-@print_result:
-    print "Entering print_result block."
-    # Cannot easily access 'local_sum' from calculate_sum in V1.
-    # Print a fixed value or a value defined locally here.
-    # (在 V1 中无法轻易访问来自 calculate_sum 的 'local_sum'。)
-    # (打印一个固定值或在此处局部定义的值。)
-    int final_result
-    final_result = 80 # The expected sum from calculate_sum's local values (50+30) (来自 calculate_sum 局部变量的预期和)
-
-    print "--- Calculation Result ---"
-    print final_result
-    print "--------------------------"
-
-    # This is the end of this execution path initiated by the goto from calculate_sum.
-    # 'back' returns control to the caller function in the Python call stack.
-    # If calculate_sum called us, we return to calculate_sum's context.
-    # (这是由来自 calculate_sum 的 goto 启动的执行路径的终点。)
-    # ('back' 将控制权返回给 Python 调用栈中的调用函数。)
-    # (如果 calculate_sum 调用了我们，我们将返回到 calculate_sum 的上下文。)
-    back             # Return from print_result (goes back to the caller, calculate_sum) (从 print_result 返回，回到调用者 calculate_sum)
-```
-
-此示例演示了涉及多个块和嵌套跳转/返回的更复杂流程，并突出了由于基于 Python 函数的翻译而产生的当前作用域限制。
+这个示例展示了块如何定义和接收参数，以及 `goto` 如何传递参数。它也演示了 `back` 返回单个或多个值。**请注意：** 注释中强调了 Eazy 代码需要进行适配（使用 `_tmp_return` 和可能的解包）才能配合**当前 V1 Python 代码生成器的返回值模拟**正常工作。最终的 Eazy 语言旨在实现更直接的返回值访问方式。
 
 ## 未来计划（初步）(Future Plans - Preliminary)
 
-* 逐步增强语法分析器，以处理更复杂的行块结构（表达式、函数调用、变量作用域等）。
-* 设计并最终确定 Eazy 语言的完整规范，包括适当的作用域和控制流规则。
+* 逐步增强语法分析器，以处理更复杂的行块结构（表达式、变量作用域等）。
+* **设计并实现“流”和“权级”概念，用于高级控制流和状态管理。**
+* 设计并最终确定 Eazy 语言的完整规范，包括作用域、执行模型以及**预期的返回值机制**的精确规则。
 * 开发语义分析器和可能的优化器。
-* 改进代码生成器或开发新的后端（例如，针对 C 或 LLVM）。
+* **改进代码生成器或开发新的后端**（例如，针对 C、LLVM 或自定义字节码虚拟机）以更好地支持 Eazy 的独特语义。
 * 实现自编译能力。
 * 开始基于 Eazy 语言开发 Neko 内核和 Nya Shell。
 
