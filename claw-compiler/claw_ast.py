@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 from claw_lexer import Token 
 @dataclass
 class ASTNode: # 基类
@@ -15,6 +15,7 @@ class Program(ASTNode):
 @dataclass
 class BlockDefinition(ASTNode): # Represents a @name: block
     name: str
+    parameters: Optional[str] = field(default_factory=list)
     # 块内部的内容列表，这些内容都是 BlockContent 的子类
     inner_content: List['BlockContent'] = field(default_factory=list)
 
@@ -39,10 +40,12 @@ class GenericLineBlock(BlockContent):
 @dataclass
 class GotoBlock(BlockContent):
     target_block_name: str # 目标块的名字
+    arguments: Optional[Token] = field(default_factory=list)
 
 
 # 代表 back 控制流块
 @dataclass
 class BackBlock(BlockContent):
+    output: Optional[Token]
     pass
 
