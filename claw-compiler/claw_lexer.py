@@ -26,6 +26,9 @@ class TokenType(Enum):
     # Special Symbols
     AT = "@"
     COLON = ":"
+    LPAREN = "("
+    RPAREN = ")"
+    COMMA = ","
 
     # Whitespace/Control 
     SPACE = "SPACE"     # Used for some reason
@@ -51,6 +54,9 @@ SINGLE_CHAR_TOKENS = {
     '=': TokenType.OPERATOR_ASSIGN,
     '@': TokenType.AT,
     ':': TokenType.COLON,
+    '(': TokenType.LPAREN,
+    ')': TokenType.RPAREN,
+    ',': TokenType.COMMA,
     ' ': TokenType.SPACE,      
     '\n': TokenType.NEWLINE,   
 }
@@ -170,16 +176,16 @@ class Lexer:
         return self.tokens
     
 if __name__ == "__main__":
-    source = """@calculate:
+    source = """@calculate():
     int a
     int b
     a = 10
     b = a * 5 + 2
     print b
-    back
+    back ()
 
 @main:
-    goto calculatecomment"""
+    goto calculate()"""
     lexer = Lexer(source)
     tokens = lexer.tokenizer()
     for token in tokens:
