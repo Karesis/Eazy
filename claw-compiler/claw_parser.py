@@ -7,7 +7,7 @@ from claw_ast import (
     ASTNode, ExpressionNode, StatementNode,
     ConstantNode, IdentifierNode, BinaryOperationNode, CallExpressionNode,
     VarDeclNode, AssignmentNode, ReturnNode, CallStatementNode,
-    ExpressionStatementNode, IfNode, GotoNode, LabelNode, # Make sure LabelNode is defined in claw_ast.py
+    ExpressionStatementNode, IfNode, GotoNode, LabelNode, UnaryOperationNode,
     ParameterNode, BlockDefinition, Program
 )
 from claw_lexer import Token, TokenType
@@ -19,6 +19,14 @@ class ParserError(Exception): # Custom exception for parser errors
         self.column = column
 
 class Parser:
+
+    PREC_LOWEST = 0
+    PREC_COMPARISON = 1 # == != < <= > >=
+    PREC_SUM = 2        # + -
+    PREC_PRODUCT = 3    # * /
+    PREC_UNARY = 4      # - (unary), ! (unary, if added later)
+    # PREC_CALL = 5     # Example for future extension
+
     def __init__(self, tokens: List[Token]):
         # Filter out NEWLINE tokens as they are mainly structural markers now,
         # except when needed specifically (e.g., after COLON).
@@ -72,7 +80,7 @@ class Parser:
     def parse(self) -> Program:
         program_node = self.parse_program()
         if self.current_token.type != TokenType.EOF:
-             self.error(f"Expected EOF, but found {self.current_token.type}")
+            self.error(f"Expected EOF, but found {self.current_token.type}")
         return program_node
 
     # --- Top-level rule: Program ---
@@ -106,30 +114,47 @@ class Parser:
             self.consume(TokenType.RPAREN)
 
         self.consume(TokenType.COLON)
-        # Expect exactly one NEWLINE followed by an INDENT to start the block body
-        # Or it could be empty (just DEDENT/EOF follows?) - need clarification
         if self.current_token.type != TokenType.NEWLINE:
-             self.error("Expected NEWLINE after block definition colon ':'")
+            self.error("Expected NEWLINE after block definition colon ':'")
         self.consume(TokenType.NEWLINE)
 
         body: List[StatementNode] = []
         # Handle indented block
-        if self.current_token.type == TokenType.INDENT:
-             self.consume(TokenType.INDENT)
-             while self.current_token.type != TokenType.DEDENT and self.current_token.type != TokenType.EOF:
-                  body.append(self.parse_statement())
-                  # parse_statement should consume trailing newline if expected
-             if self.current_token.type == TokenType.DEDENT:
-                 self.consume(TokenType.DEDENT)
-             else:
-                 # Reached EOF or start of next @ block without DEDENT? Error depends on rules.
-                 # If EOF is okay here, check for it. If only DEDENT is okay, error.
-                 if self.current_token.type != TokenType.EOF: # Allow EOF end?
-                      self.error("Expected DEDENT to close block body")
-        # Handle case where block has no body (just colon, newline, next @ or EOF?)
-        # elif self.current_token.type not in (TokenType.AT, TokenType.EOF):
-        #     self.error("Expected INDENT to start block body or EOF/@")
+        if self.current_token.type == TokenType.INDENT: # <--- 首先检查是否有缩进
+            self.consume(TokenType.INDENT)
 
+            if self.current_token.type == TokenType.DEDENT:
+                    self.error("Block body cannot be empty. Add statements after indentation.")
+
+            # 循环解析语句，直到 DEDENT 或 EOF
+            while self.current_token.type != TokenType.DEDENT and self.current_token.type != TokenType.EOF:
+                    statement = self.parse_statement()
+                    if statement: # 确保 parse_statement 返回有效节点
+                            body.append(statement)
+                    # else: 错误情况应该由 parse_statement 内部处理或在循环外检测
+
+            # 循环结束后，检查是如何结束的
+            if self.current_token.type == TokenType.DEDENT:
+                self.consume(TokenType.DEDENT) # 正常结束，消耗 DEDENT
+                # --- 新增：检查 body 是否为空（虽然上面的检查可能已经覆盖）---
+                if not body:
+                        # 如果能到这里，意味着 INDENT 后面可能有非语句内容或解析器逻辑问题
+                        self.error("Internal Error: Block body parsed as empty despite initial check.")
+                # --- 结束新增检查 ---
+            elif self.current_token.type == TokenType.EOF:
+                    # 在块内到达文件末尾，通常意味着缺少 DEDENT
+                    self.error("Unexpected EOF inside indented block. Missing DEDENT?")
+            else:
+                    # 如果不是 DEDENT 也不是 EOF，可能是内部解析错误或未预料的 Token
+                    self.error(f"Internal Error: Expected DEDENT or EOF after block body, got {self.current_token.type}")
+
+        # --- 如果根本就没有 INDENT ---
+        else: # self.current_token.type != TokenType.INDENT
+                # 在 ':' 和 NEWLINE 之后，必须有 INDENT
+                self.error("Expected indented block body after '@name:' definition.")
+
+        # 最终创建 BlockDefinition
+        # 此时 body 应该是非空的，因为空块情况已在上面报错
         return BlockDefinition(name=name_node.name, parameters=parameters, body=body)
 
     # --- Statement Parser (Dispatcher) ---
@@ -150,23 +175,16 @@ class Parser:
         elif token_type == TokenType.KEYWORD_IF:
             statement = self.parse_if_statement()
         elif token_type == TokenType.KEYWORD_GOTO:
-             statement = self.parse_goto_statement()
+                statement = self.parse_goto_statement()
         elif token_type == TokenType.IDENTIFIER:
             statement = self.parse_assignment_or_call_or_label_statement()
         elif token_type == TokenType.KEYWORD_PRINT: # Example: Handle print directly
-             statement = self.parse_print_statement() # Need to implement this
-        # Ignore DEDENT/INDENT here, they are handled by block parsing logic
-        # elif token_type in (TokenType.INDENT, TokenType.DEDENT):
-        #      self.error("Internal Error: INDENT/DEDENT should be handled by block parser.")
+                statement = self.parse_print_statement() # Need to implement this
         elif token_type == TokenType.EOF:
-             self.error("Unexpected EOF while parsing statement.")
+            self.error("Unexpected EOF while parsing statement.")
         else:
             self.error(f"Unexpected token type at start of statement: {token_type}")
 
-        # Ensure statement parser consumed a trailing newline IF it wasn't a block structure
-        # if self.current_token.type == TokenType.NEWLINE:
-        #      self.consume(TokenType.NEWLINE)
-        # Let's assume simple statements consume their own newline for now.
         return statement
 
 
@@ -176,10 +194,10 @@ class Parser:
         value_expr = None
         # Check if a value follows 'return' before the newline
         if self.current_token.type != TokenType.NEWLINE and self.current_token.type != TokenType.EOF and self.current_token.type != TokenType.DEDENT:
-             value_expr = self.parse_expression()
+            value_expr = self.parse_expression()
         # Return statement should be followed by newline or end of block/file
         if self.current_token.type != TokenType.NEWLINE and self.current_token.type != TokenType.DEDENT and self.current_token.type != TokenType.EOF:
-             self.error("Expected NEWLINE or end of block after return statement")
+            self.error("Expected NEWLINE or end of block after return statement")
         if self.current_token.type == TokenType.NEWLINE: self.consume(TokenType.NEWLINE) # Consume if present
         return ReturnNode(value=value_expr)
 
@@ -192,7 +210,7 @@ class Parser:
             self.consume(TokenType.OPERATOR_ASSIGN)
             initializer_expr = self.parse_expression()
         if self.current_token.type != TokenType.NEWLINE and self.current_token.type != TokenType.DEDENT and self.current_token.type != TokenType.EOF:
-             self.error("Expected NEWLINE or end of block after variable declaration")
+            self.error("Expected NEWLINE or end of block after variable declaration")
         if self.current_token.type == TokenType.NEWLINE: self.consume(TokenType.NEWLINE)
         return VarDeclNode(var_name=var_name_node, var_type="int", initializer=initializer_expr)
 
@@ -233,13 +251,13 @@ class Parser:
         return IfNode(condition=condition, then_body=then_body, else_body=else_body)
 
     def parse_goto_statement(self) -> GotoNode:
-         self.consume(TokenType.KEYWORD_GOTO)
-         label_token = self.consume(TokenType.IDENTIFIER)
-         label_node = IdentifierNode(name=label_token.lexeme)
-         if self.current_token.type != TokenType.NEWLINE and self.current_token.type != TokenType.DEDENT and self.current_token.type != TokenType.EOF:
-              self.error("Expected NEWLINE or end of block after goto statement")
-         if self.current_token.type == TokenType.NEWLINE: self.consume(TokenType.NEWLINE)
-         return GotoNode(target_label=label_node)
+        self.consume(TokenType.KEYWORD_GOTO)
+        label_token = self.consume(TokenType.IDENTIFIER)
+        label_node = IdentifierNode(name=label_token.lexeme)
+        if self.current_token.type != TokenType.NEWLINE and self.current_token.type != TokenType.DEDENT and self.current_token.type != TokenType.EOF:
+            self.error("Expected NEWLINE or end of block after goto statement")
+        if self.current_token.type == TokenType.NEWLINE: self.consume(TokenType.NEWLINE)
+        return GotoNode(target_label=label_node)
 
     def parse_assignment_or_call_or_label_statement(self) -> StatementNode:
         """Handles lines starting with an IDENTIFIER."""
@@ -256,43 +274,39 @@ class Parser:
             return AssignmentNode(target=name_node, value=value_expr)
 
         elif self.current_token.type == TokenType.LPAREN:
-            # Call used as statement: IDENTIFIER ( args... )
-            # Reuse the helper, passing the already consumed identifier node
             call_expr = self._parse_call_expression_suffix(callee_node=name_node)
             if self.current_token.type != TokenType.NEWLINE and self.current_token.type != TokenType.DEDENT and self.current_token.type != TokenType.EOF:
-                 self.error("Expected NEWLINE or end of block after call statement")
+                self.error("Expected NEWLINE or end of block after call statement")
             if self.current_token.type == TokenType.NEWLINE: self.consume(TokenType.NEWLINE)
             # Decide AST node type. CallStatementNode seems appropriate.
             return CallStatementNode(call_expression=call_expr)
 
         elif self.current_token.type == TokenType.COLON:
-             # Label definition: IDENTIFIER :
-             self.consume(TokenType.COLON)
-             if self.current_token.type != TokenType.NEWLINE and self.current_token.type != TokenType.DEDENT and self.current_token.type != TokenType.EOF:
-                 self.error("Expected NEWLINE or end of block after label definition")
-             if self.current_token.type == TokenType.NEWLINE: self.consume(TokenType.NEWLINE)
-             # Ensure LabelNode is defined in claw_ast.py
-             return LabelNode(label_name=name_node)
+            # Label definition: IDENTIFIER :
+            self.consume(TokenType.COLON)
+            if self.current_token.type != TokenType.NEWLINE and self.current_token.type != TokenType.DEDENT and self.current_token.type != TokenType.EOF:
+                self.error("Expected NEWLINE or end of block after label definition")
+            if self.current_token.type == TokenType.NEWLINE: self.consume(TokenType.NEWLINE)
+            # Ensure LabelNode is defined in claw_ast.py
+            return LabelNode(label_name=name_node)
         else:
-            # If it's just an identifier on a line, maybe treat as expression statement?
-            # Or raise error? Let's error for now.
             self.error(f"Expected '=', '(', or ':' after identifier '{name_token.lexeme}', but got {self.current_token.type}")
 
     def parse_print_statement(self) -> ExpressionStatementNode:
-         # Example for a built-in like 'print expression'
-         print_token = self.consume(TokenType.KEYWORD_PRINT)
-         # Assume print takes one argument for now
-         argument = self.parse_expression() # Parse the expression to print
-         # Create a 'call' expression node for print
-         print_call = CallExpressionNode(
-             callee_name=IdentifierNode(name=print_token.lexeme),
-             arguments=[argument]
-         )
-         if self.current_token.type != TokenType.NEWLINE and self.current_token.type != TokenType.DEDENT and self.current_token.type != TokenType.EOF:
-              self.error("Expected NEWLINE or end of block after print statement")
-         if self.current_token.type == TokenType.NEWLINE: self.consume(TokenType.NEWLINE)
-         # Wrap the call in an ExpressionStatementNode
-         return ExpressionStatementNode(expression=print_call)
+        # Example for a built-in like 'print expression'
+        print_token = self.consume(TokenType.KEYWORD_PRINT)
+        # Assume print takes one argument for now
+        argument = self.parse_expression() # Parse the expression to print
+        # Create a 'call' expression node for print
+        print_call = CallExpressionNode(
+            callee_name=IdentifierNode(name=print_token.lexeme),
+            arguments=[argument]
+        )
+        if self.current_token.type != TokenType.NEWLINE and self.current_token.type != TokenType.DEDENT and self.current_token.type != TokenType.EOF:
+            self.error("Expected NEWLINE or end of block after print statement")
+        if self.current_token.type == TokenType.NEWLINE: self.consume(TokenType.NEWLINE)
+        # Wrap the call in an ExpressionStatementNode
+        return ExpressionStatementNode(expression=print_call)
 
 
     # --- Expression Parsing (Recursive Descent with Precedence Climbing/Pratt) ---
@@ -300,25 +314,32 @@ class Parser:
 
     def parse_expression(self, min_precedence=0) -> ExpressionNode:
         """Parses an expression using precedence climbing."""
-        # Start with the leftmost part of the expression (primary)
-        left = self.parse_primary_expression()
+        unary_op_token = self.current_token
+        unary_precedence = self._get_unary_operator_precedence(unary_op_token.type)
+
+        if unary_precedence != -1 and unary_precedence >= min_precedence:
+                # Consume the unary operator
+                self.consume(unary_op_token.type)
+                # Parse the operand with the unary operator's precedence
+                operand = self.parse_expression(unary_precedence)
+                left = UnaryOperationNode(operator=unary_op_token.lexeme, operand=operand)
+        else:
+                # If no unary operator, parse primary expression as before
+                left = self.parse_primary_expression()
 
         # Precedence climbing loop
         while True:
             op_token = self.current_token
-            precedence = self._get_operator_precedence(op_token.type)
+            precedence = self._get_binary_operator_precedence(op_token.type)
 
-            # Stop if operator precedence is too low or token is not an operator
-            if precedence < min_precedence or precedence == -1:
+            if precedence == -1 or precedence < min_precedence:
                 break
 
-            # Consume the operator
             self.consume(op_token.type)
 
-            # Parse the right-hand side with higher precedence
-            right = self.parse_expression(precedence + 1) # +1 for left-associativity
+            # Handle associativity (assuming left-associativity for now)
+            right = self.parse_expression(precedence + 1)
 
-            # Combine left, operator, right into a BinaryOperationNode
             left = BinaryOperationNode(left=left, operator=op_token.lexeme, right=right)
 
         return left
@@ -350,64 +371,75 @@ class Parser:
             expr = self.parse_expression() # Parse expression inside parens
             self.consume(TokenType.RPAREN) # Expect closing parenthesis
             return expr
-        # TODO: Add Unary operators like '-' if needed
         else:
             self.error(f"Unexpected token in primary expression: {token.type}")
+    
+    def _get_unary_operator_precedence(self, token_type: TokenType) -> int:
+        """Returns the precedence level for UNARY prefix operators."""
+        if token_type == TokenType.OPERATOR_MINUS:
+            return self.PREC_UNARY # Unary minus has high precedence
+        # Add other unary operators like '!' here if needed
+        else:
+            return -1 # Not a recognized unary prefix operator
+
+    def _get_binary_operator_precedence(self, token_type: TokenType) -> int:
+        """Returns the precedence level for BINARY operators."""
+        if token_type in (TokenType.OPERATOR_MULTIPLY, TokenType.OPERATOR_DIVIDE):
+            return self.PREC_PRODUCT
+        elif token_type in (TokenType.OPERATOR_PLUS, TokenType.OPERATOR_MINUS):
+            return self.PREC_SUM
+        elif token_type in (TokenType.OPERATOR_GT, TokenType.OPERATOR_GE,
+                            TokenType.OPERATOR_LT, TokenType.OPERATOR_LE,
+                            TokenType.OPERATOR_EQ, TokenType.OPERATOR_NE):
+             return self.PREC_COMPARISON
+        else:
+            return -1 # Not a recognized binary operator
 
     def _parse_call_expression_suffix(self, callee_node: Optional[IdentifierNode]=None) -> CallExpressionNode:
-         """Helper to parse '( [args...] )' part of a call, assuming callee is known."""
-         if callee_node is None: # If called from parse_call_statement
-              callee_token = self.consume(TokenType.IDENTIFIER)
-              callee_node = IdentifierNode(name=callee_token.lexeme)
+        """Helper to parse '( [args...] )' part of a call, assuming callee is known."""
+        if callee_node is None: # If called from parse_call_statement
+            callee_token = self.consume(TokenType.IDENTIFIER)
+            callee_node = IdentifierNode(name=callee_token.lexeme)
 
-         arguments: List[ExpressionNode] = []
-         self.consume(TokenType.LPAREN)
-         while self.current_token.type != TokenType.RPAREN:
-             arguments.append(self.parse_expression()) # Parse each argument expression
-             if self.current_token.type == TokenType.COMMA:
-                 self.consume(TokenType.COMMA)
-             elif self.current_token.type != TokenType.RPAREN:
-                 self.error("Expected ',' or ')' in call arguments")
-         self.consume(TokenType.RPAREN)
-         return CallExpressionNode(callee_name=callee_node, arguments=arguments)
-
-
-    def _get_operator_precedence(self, token_type: TokenType) -> int:
-        """Returns the precedence level for binary operators."""
-        # Higher number means higher precedence
-        if token_type in (TokenType.OPERATOR_MULTIPLY, TokenType.OPERATOR_DIVIDE):
-            return 2
-        elif token_type in (TokenType.OPERATOR_PLUS, TokenType.OPERATOR_MINUS):
-            return 1
-        elif token_type in (TokenType.OPERATOR_GT, TokenType.OPERATOR_GE, TokenType.OPERATOR_LT, TokenType.OPERATOR_LE, TokenType.OPERATOR_EQ, TokenType.OPERATOR_NE):
-             return 0 # Comparison operators usually have lower precedence
-        # Add other operators (like assignment '=') if they can be part of expressions
-        else:
-            return -1 # Not a binary operator we handle in expressions here
+        arguments: List[ExpressionNode] = []
+        self.consume(TokenType.LPAREN)
+        while self.current_token.type != TokenType.RPAREN:
+            arguments.append(self.parse_expression()) # Parse each argument expression
+            if self.current_token.type == TokenType.COMMA:
+                self.consume(TokenType.COMMA)
+            elif self.current_token.type != TokenType.RPAREN:
+                self.error("Expected ',' or ')' in call arguments")
+        self.consume(TokenType.RPAREN)
+        return CallExpressionNode(callee_name=callee_node, arguments=arguments)
 
 # --- Example Usage & Basic Test ---
 if __name__ == "__main__":
     # Import Lexer here for testing purposes
     from claw_lexer import Lexer, LexerError
 
-    # Example Eazy code using new syntax and indentation
-    test_source = """
-@calculate(a, b):
-  int sum = a + b
-  return sum
 
+    # --- NEW Test Source with Unary Minus ---
+    test_source = """
 @main:
-  int x = 10
-  int y
-  if x > 5:
-    print "x is large" # Requires print statement handling
-    y = calculate(x, 20)
+  int x = -10       # Test unary minus on constant
+  int y = 5
+  int z = x + y     # Test addition with negative number (-10 + 5 = -5)
+  int w = -(x + z)  # Test unary minus on parenthesized expression -(-10 + -5) = -(-15) = 15
+  int k = 10 * -y   # Test binary op with unary minus operand (10 * -5 = -50)
+
+  print x           # Expected: -10
+  print z           # Expected: -5
+  print w           # Expected: 15
+  print k           # Expected: -50
+
+  if -y < 0:       # Test unary minus in condition
+    print "y is positive, so -y is negative"
   else:
-    print "x is small"
-    y = 5
-  print y
+    print "This should not print"
+
   return 0
 """
+    # --- End NEW Test Source ---
 
     print("--- Source Code ---")
     print(test_source)
@@ -423,14 +455,13 @@ if __name__ == "__main__":
                   print(token)
         print("--------------")
 
+
+
         parser = Parser(tokens)
         ast_tree = parser.parse()
 
         print("\n--- AST ---")
-        # Basic AST print (repr) - Can be overwhelming
-        # print(ast_tree)
-
-        # Nicer AST printing helper
+        # Nicer AST printing helper (remains the same)
         def print_ast_nice(node, indent=0):
             indent_str = "  " * indent
             node_type = type(node).__name__

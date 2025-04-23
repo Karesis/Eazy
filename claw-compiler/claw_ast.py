@@ -45,6 +45,12 @@ class CallExpressionNode(ExpressionNode):
     callee_name: IdentifierNode
     arguments: List[ExpressionNode] = field(default_factory=list)
 
+@dataclass
+class UnaryOperationNode(ExpressionNode):
+    """代表一个一元运算 (例如, -x, !condition)。"""
+    operator: str  # 存储操作符词素，例如 "-", "!"
+    operand: ExpressionNode # 应用该运算符的操作数
+
 # --- 语句节点 ---
 
 @dataclass
