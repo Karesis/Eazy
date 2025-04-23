@@ -1,3 +1,0 @@
-@main:   
-    result = 42
-    back result
