@@ -157,7 +157,7 @@ class Lexer:
 
         # Consume the leading whitespace we just measured
         spaces_to_advance = current_indent
-        start_line, start_column = self.line, self.column # Save position before advancing
+        start_line = self.line  # Save position before advancing
         for _ in range(spaces_to_advance):
             self.advance() # Updates self.position, self.line, self.column
 
@@ -317,7 +317,7 @@ class Lexer:
 
         # Emit remaining DEDENTs
         while self.indent_stack[-1] > 0:
-            last_indent = self.indent_stack.pop()
+            self.indent_stack.pop()
             self._add_token(TokenType.DEDENT, start_line=self.line, start_column=1)
 
         self._add_token(TokenType.EOF, start_line=self.line, start_column=self.column)
