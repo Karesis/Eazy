@@ -87,6 +87,12 @@ class Lexer:
     # Init Class
     def __init__(self, source_code: str):
         self.source_code = source_code
+    @property
+    def current_char(self) -> Optional[str]:
+        return self.source_code[self.position] if self.position < len(self.source_code) else None
+
+    # Main Method: Tokenizer
+    def tokenizer(self) -> List[Token]:
         self.tokens: List[Token] = []
         # Code String Pointer
         self.position = 0
@@ -96,6 +102,15 @@ class Lexer:
         # Stack For Indentations
         self.indent_stack: List[int] = [0]
         self.at_line_start = True   # If its after a '\n', else ignore
-    @property
-    def current_char(self) -> Optional[str]:
-        return self.source_code[self.position] if self.position < len(self.source_code) else None
+        
+        while self.current_char is not None:
+            pass
+        return
+
+
+
+
+
+
+
+ 
