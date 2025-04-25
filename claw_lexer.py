@@ -1,116 +1,96 @@
-# --- Import ---
-from enum import Enum
+from enum import Enum, auto
 from dataclasses import dataclass
-from typing import Any, List, Optional
 
 # --- Structure ---
+# Token Category
+class TokenCategory(Enum):
+    OPERATOR = auto()        # General operators like +, -, *, /
+    LOGICAL_OP = auto()      # Logical operators like ==, !=, <, >
+    KEYWORD = auto()         # Language keywords like if, else, while
+    IDENTIFIER = auto()      # Variable names, function names, etc.
+    LITERAL = auto()         # Concrete values like numbers, strings
+    SEPARATOR = auto()       # Punctuation like (), {}, ;, ,
+    ASSIGNMENT = auto()      # Assignment operators like =
+    BOL = auto()             # Begin of A Line
+    EOF = auto()             # End of File marker
+    UNKNOWN = auto()         # For unrecognized characters/tokens
+
+# Token Type
 class TokenType(Enum):
+    def __init__(self, value, display: str, category: TokenCategory):
+        self.display: str = display
+        self.category: TokenCategory = category
+
+    # -- Member Definitions --
+
+    # Literals
+    literal_int = (auto(), '<integer>', TokenCategory.literal)
+    literal_float = (auto(), '<float>', TokenCategory.literal) 
+    LITERAL_STR = (auto(), '<string>', TokenCategory.LITERAL)
+
+    # Identifiers 
+    IDENTIFIER = (auto(), '<identifier>', TokenCategory.IDENTIFIER)
+
+    # Keywords 
+    KEYWORD_IF = (auto(), 'if', TokenCategory.KEYWORD)
+    KEYWORD_ELIF = (auto(), 'elif', TokenCategory.KEYWORD)
+    KEYWORD_ELSE = (auto(), 'else', TokenCategory.KEYWORD)
+    KEYWORD_WHILE = (auto(), 'while', TokenCategory.KEYWORD)
+    KEYWORD_PRINT = (auto(), 'print', TokenCategory.KEYWORD)
+    KEYWORD_GOTO = (auto(), 'goto', TokenCategory.KEYWORD)
+    KEYWORD_RET = (auto(), 'ret', TokenCategory.KEYWORD)
+
     # Operators
-    OPERATOR_PLUS = "+"
-    OPERATOR_MINUS = "-"
-    OPERATOR_MULTIPLY = "*"
-    OPERATOR_DIVIDE = "/"
-    OPERATOR_ASSIGN = "="
-    OPERATOR_EQ = "=="      # Equal
-    OPERATOR_NE = "!="      # Not Equal
-    OPERATOR_LT = "<"       # Less Than
-    OPERATOR_LE = "<="      # Less Than or Equal
-    OPERATOR_GT = ">"       # Greater Than
-    OPERATOR_GE = ">="      # Greater Than or Equal
+    OP_PLUS = (auto(), '+', TokenCategory.OPERATOR)
+    OP_MINUS = (auto(), '-', TokenCategory.OPERATOR)
+    OP_MULTIPLY= (auto(), '*', TokenCategory.OPERATOR)
+    OP_DIVIDE  = (auto(), '/', TokenCategory.OPERATOR)
+    OP_SHIFTLEFT = (auto(), '<<', TokenCategory.OPERATOR)
+    OP_SHIFTRIGHT = (auto(), '>>', TokenCategory.OPERATOR)
+    OP_AND = (auto(), '&', TokenCategory.OPERATOR)
+    OP_OR = (auto(), '|', TokenCategory.OPERATOR)
+    OP_XOR = (auto(), '^', TokenCategory.OPERATOR)
+    OP_POWER = (auto(), '**', TokenCategory.OPERATOR)
+    OP_MOD = (auto(), '%', TokenCategory.OPERATOR)
 
-    # Operand Type
-    NUMBER = "NUMBER"       # Currently only integer
-    STRING = "STRING"
+    # Logical Operators
+    OP_EQ = (auto(), '==', TokenCategory.LOGICAL_OP) 
+    OP_LT = (auto(), '<', TokenCategory.LOGICAL_OP)
+    OP_LTE = (auto(), '<=', TokenCategory.LOGICAL_OP)
+    OP_GT = (auto(), '>', TokenCategory.LOGICAL_OP) 
+    OP_GTE = (auto(), '>=', TokenCategory.LOGICAL_OP)
+    OP_ANDAND = (auto(), '&&', TokenCategory.LOGICAL_OP)
+    OP_OROR = (auto(), '||', TokenCategory.LOGICAL_OP)
 
-    # Keywords
-    KEYWORD_INT = "int"
-    KEYWORD_PRINT = "print" # Example built-in
-    KEYWORD_GOTO = "goto"   # For intra-block jumps
-    KEYWORD_EXIT = "exit"   # Example built-in
-    KEYWORD_RETURN = "return" # For returning from blocks
-    KEYWORD_IF = "if"
-    KEYWORD_ELSE = "else"
+    # Assignment
+    ASSIGN = (auto(), '=', TokenCategory.ASSIGNMENT)
 
-    # Identifier Category
-    IDENTIFIER = "IDENTIFIER" # Variable names, block names, labels
+    # Separators / Punctuation
+    LPAREN = (auto(), '(', TokenCategory.SEPARATOR)
+    RPAREN = (auto(), ')', TokenCategory.SEPARATOR)
+    LBRACE = (auto(), '{', TokenCategory.SEPARATOR)
+    RBRACE = (auto(), '}', TokenCategory.SEPARATOR)
+    COMMA = (auto(), ',', TokenCategory.SEPARATOR)
 
-    # Special Symbols
-    AT = "@"
-    COLON = ":"
-    LPAREN = "("
-    RPAREN = ")"
-    COMMA = ","
+    # End of File
+    EOF = (auto(), '<EOF>', TokenCategory.EOF)
+    # Begin of Line
+    BOL = (auto(), '<BOL>', TokenCategory.BOL)
 
-    # Whitespace/Control
-    NEWLINE = "NEWLINE"     # Significant for ending statements and structure
-    INDENT = "INDENT"       # Pseudo-token for increased indentation
-    DEDENT = "DEDENT"       # Pseudo-token for decreased indentation
+    # Unknown / Error Token
+    UNKNOWN = (auto(), '<unknown>', TokenCategory.UNKNOWN)
 
-    # Markers
-    EOF = "EOF"             # End-of-File marker
-    ERROR = "ERROR"         # Represents a lexing error
-
-# Token Dictionary
-SINGLE_CHAR_TOKENS = {
-    '+': TokenType.OPERATOR_PLUS, 
-    '-': TokenType.OPERATOR_MINUS,
-    '*': TokenType.OPERATOR_MULTIPLY, 
-    '/': TokenType.OPERATOR_DIVIDE,
-    '@': TokenType.AT, 
-    ':': TokenType.COLON,
-    '(': TokenType.LPAREN, 
-    ')': TokenType.RPAREN, 
-    ',': TokenType.COMMA,
-    '\n': TokenType.NEWLINE,
-}
-KEYWORDS_MAP = {
-    'int': TokenType.KEYWORD_INT, 
-    'print': TokenType.KEYWORD_PRINT,
-    'goto': TokenType.KEYWORD_GOTO, 
-    'exit': TokenType.KEYWORD_EXIT,
-    'if': TokenType.KEYWORD_IF, 
-    'else': TokenType.KEYWORD_ELSE,
-    'return': TokenType.KEYWORD_RETURN
-}
-
-@dataclass(froze=True)
+# Token Class
+@dataclass(frozen=True)
 class Token:
     type: TokenType
     lexeme: str
     value: Any
-    # Location
     line: int
     column: int
 
-# --- Lexer Class ---
-class Lexer:
-    # Init Class
-    def __init__(self, source_code: str):
-        self.source_code = source_code
-    @property
-    def current_char(self) -> Optional[str]:
-        return self.source_code[self.position] if self.position < len(self.source_code) else None
+    def __repr__(self) -> str:
+        return (f"Token(type={self.type.name}, lexeme='{self.lexeme}', "
+                f"value={repr(self.value)}, line={self.line}, col={self.column}, "
+                f"cat='{self.type.category.name}')")
 
-    # Main Method: Tokenizer
-    def tokenizer(self) -> List[Token]:
-        self.tokens: List[Token] = []
-        # Code String Pointer
-        self.position = 0
-        # Location Infomation
-        self.line = 1
-        self.column = 1
-        # Stack For Indentations
-        self.indent_stack: List[int] = [0]
-        self.at_line_start = True   # If its after a '\n', else ignore
-        
-        while self.current_char is not None:
-            pass
-        return
-
-
-
-
-
-
-
- 

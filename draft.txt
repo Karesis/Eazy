@@ -1,0 +1,32 @@
+# main.ez:
+
+goto printa
+
+
+# file1.ez
+# 假设就是这么赋值的
+int b
+b = 4
+
+@printa:
+  a = b + 1
+  print:a  # 先假设有print这么个东西
+  back  
+
+可以理解成程序其实是这样的：
+
+# 编译后的文件假设：
+# main
+b = 4
+
+main:
+
+goto printa
+_back:
+exit
+
+printa:
+a = b+1
+print a
+goto _back 
+
