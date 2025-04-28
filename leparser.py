@@ -3,7 +3,7 @@
 
 import sys
 # Import AST node definitions from the separate AST file
-from eazy_ast import *
+from eazy_ast import * # Make sure eazy_ast.py is in the same directory or accessible
 
 # --- Token Definitions ---
 TT_IDENTIFIER = 'IDENTIFIER'
@@ -39,7 +39,7 @@ class Token:
             return f'Token({self.type}, {repr(self.value)}, L{self.line} C{self.column})'
         return f'Token({self.type}, L{self.line} C{self.column})'
 
-# --- Lexer Implementation ---
+# --- Lexer Implementation (Keep the existing Lexer code here) ---
 class Lexer:
     """Processes Eazy source text and converts it into a stream of tokens."""
     def __init__(self, text):
@@ -154,15 +154,21 @@ class Lexer:
 
             if self.current_char.isspace() and self.current_char != '\n': self.skip_whitespace(); continue
             if self.current_char == '#':
-                while self.current_char is not None and self.current_char != '\n': self.advance()
+                # Skip the entire comment line
+                while self.current_char is not None and self.current_char != '\n':
+                    self.advance()
+                # Don't add a newline token here, let the main loop handle the actual newline character if present
                 continue
 
             if self.current_char == '\n':
+                # Consume the newline, handle potential indent/dedent for the *next* line,
+                # and then add the NEWLINE token to the stream.
                 self.advance() # Consume '\n' first
-                self.handle_newline() # Process potential indent/dedent for next line
+                self.handle_newline() # Process next line's indentation
                 self.tokens.append(Token(TT_NEWLINE, line=start_line, column=start_column)) # Add NEWLINE token
                 continue
 
+            # --- Token Recognition ---
             token = None
             if self.current_char.isalpha() or self.current_char == '_': token = self.get_identifier()
             elif self.current_char.isdigit(): token = self.get_number()
@@ -177,6 +183,7 @@ class Lexer:
                         token = Token(symbol_map[self.current_char], self.current_char, line=start_line, column=start_column)
                         self.advance()
                     else:
+                        # Unknown character
                         unknown_char = self.current_char; self.advance()
                         token = Token(TT_UNKNOWN, unknown_char, line=start_line, column=start_column)
 
@@ -231,15 +238,21 @@ class Parser:
     def parse_program(self):
         """Parse the entire program (a sequence of blocks)."""
         blocks = []
-        self.skip_newlines()
+        self.skip_newlines() # Skip leading newlines before the first block
         while self.current_token.type != TT_EOF:
             if self.current_token.type == TT_SYMBOL and self.current_token.value == '@':
                 blocks.append(self.parse_block_def())
+                # --- *** FIX HERE *** ---
+                # After successfully parsing a block, skip any newlines
+                # that might appear before the next block definition or EOF.
+                self.skip_newlines()
+                # --- *** END FIX *** ---
             else:
-                 print(f"SyntaxError (L{self.current_token.line} C{self.current_token.column}): Expected '@' to start block definition, got {self.current_token.type}", file=sys.stderr)
+                 # If not EOF and not '@', it's an error at the top level
+                 print(f"SyntaxError (L{self.current_token.line} C{self.current_token.column}): Expected '@' to start block definition or EOF, got {self.current_token.type} ('{self.current_token.value}')", file=sys.stderr)
                  sys.exit(1)
-            # Block parsing handles its own trailing newlines/dedents
         return ProgramNode(blocks)
+
 
     def parse_block_def(self):
         """Parse a block definition: @name(params): NEWLINE INDENT body DEDENT"""
@@ -250,29 +263,26 @@ class Parser:
         if self.current_token.type == TT_SYMBOL and self.current_token.value == '(':
             params = self.parse_parameters()
         self.eat(TT_SYMBOL, ':')
-        self.eat(TT_NEWLINE)
+        self.eat(TT_NEWLINE) # Expect *at least one* newline after ':'
+
+        # Skip any potentially intervening blank lines or comment lines' newlines
+        self.skip_newlines()
 
         body = []
-        # Handle optional indentation for the block body
+        # Now check for INDENT
         if self.current_token.type == TT_INDENT:
             self.advance() # Consume INDENT
             body = self.parse_block_body()
+            # Ensure parse_block_body consumes until DEDENT
             self.eat(TT_DEDENT) # Expect DEDENT at the end
-        # Allow empty blocks (no INDENT/DEDENT needed if immediately followed by EOF or another block def)
-        elif self.current_token.type not in (TT_EOF, TT_SYMBOL): # Check if something unexpected follows newline
-             # If it's not EOF or another '@', it should have been INDENT or DEDENT (for empty block followed by parent dedent)
-             # This logic might need refinement based on exact empty block rules.
-             # Let's assume empty blocks are allowed if the next token implies the block ends.
-             # If the next token is DEDENT, it means an empty block followed by parent dedent.
-             if self.current_token.type == TT_DEDENT:
-                 pass # Okay, empty block, parent will handle dedent.
-             # If it's EOF or '@', it's also okay.
-             elif self.current_token.type in (TT_EOF, TT_SYMBOL):
-                 pass
-             else:
-                 print(f"SyntaxError (L{self.current_token.line} C{self.current_token.column}): Expected INDENT after block definition ':', got {self.current_token.type}", file=sys.stderr)
-                 sys.exit(1)
-
+        # Allow empty blocks if the next significant token indicates the block ends
+        elif self.current_token.type in (TT_EOF, TT_DEDENT):
+             pass
+        elif self.current_token.type == TT_SYMBOL and self.current_token.value == '@':
+             pass
+        else:
+            print(f"SyntaxError (L{self.current_token.line} C{self.current_token.column}): Expected INDENT or end of block after ':', got {self.current_token.type} ('{self.current_token.value}')", file=sys.stderr)
+            sys.exit(1)
 
         return BlockDefNode(name_token, params, body, start_line, start_col)
 
@@ -294,12 +304,25 @@ class Parser:
     def parse_block_body(self):
         """Parse statements within an indented block."""
         statements = []
+        # Skip leading newlines within the block body before the first statement
+        self.skip_newlines()
+
         while self.current_token.type not in (TT_DEDENT, TT_EOF):
+            # If we encounter newlines here, it means blank/comment lines. Skip them.
+            if self.current_token.type == TT_NEWLINE:
+                self.skip_newlines() # Skip this and any subsequent newlines
+                continue # Go to the next iteration of the while loop to check DEDENT/EOF again
+
+            # Now, we should be at the start of a valid statement
             statements.append(self.parse_statement())
+
+            # Expect a newline after a valid statement, unless it's the last one before DEDENT
             if self.current_token.type not in (TT_DEDENT, TT_EOF):
                  self.eat(TT_NEWLINE)
-                 self.skip_newlines() # Allow blank lines
+                 # Skip potentially multiple blank/comment lines after the statement's newline
+                 self.skip_newlines()
         return statements
+
 
     def parse_statement(self):
         """Parse a single statement."""
@@ -326,13 +349,7 @@ class Parser:
         print(f"SyntaxError (L{token.line} C{token.column}): Unexpected token at start of statement: {token.type} ('{token.value}')", file=sys.stderr)
         sys.exit(1)
 
-    # --- Statement Parsing Methods ---
-    # (Keep the implementations for parse_var_decl, parse_struct_instance,
-    # parse_set_statement, parse_image_statement, parse_call_statement,
-    # parse_ret_statement, parse_goto_statement, parse_label, parse_if_statement,
-    # parse_print_statement, parse_exit_statement, parse_binding,
-    # parse_argument_list from the previous version, as they don't need
-    # changes related to this refactoring)
+    # --- Statement Parsing Methods (Keep existing implementations) ---
 
     def parse_var_decl(self):
         type_token = self.eat(TT_KEYWORD)
@@ -397,16 +414,20 @@ class Parser:
         return LabelNode(name)
 
     def parse_if_statement(self):
-        # Correct implementation: expects statement at same indent level after newline
         self.eat(TT_KEYWORD, 'if')
         condition = self.parse_comparison()
         self.eat(TT_NEWLINE)
-        # The statement follows directly, without extra indent
-        if self.current_token.type in (TT_DEDENT, TT_EOF): # Cannot end after if condition+newline
+        if self.current_token.type in (TT_DEDENT, TT_EOF):
+             print(f"SyntaxError (L{self.current_token.line} C{self.current_token.column}): Expected statement after 'if', found {self.current_token.type}", file=sys.stderr)
+             sys.exit(1)
+        # Need to skip potential blank/comment lines before the actual statement
+        self.skip_newlines()
+        if self.current_token.type in (TT_DEDENT, TT_EOF): # Check again after skipping newlines
              print(f"SyntaxError (L{self.current_token.line} C{self.current_token.column}): Expected statement after 'if', found {self.current_token.type}", file=sys.stderr)
              sys.exit(1)
         statement = self.parse_statement()
         return IfNode(condition, statement)
+
 
     def parse_print_statement(self):
         self.eat(TT_KEYWORD, 'print')
@@ -434,11 +455,7 @@ class Parser:
         self.eat(TT_SYMBOL, ')')
         return args
 
-
-    # --- Expression Parsing Methods ---
-    # (Keep the implementations for parse_expression, parse_comparison,
-    # parse_arithmetic, parse_term, parse_factor, parse_identifier_or_access,
-    # parse_target_expression from the previous version)
+    # --- Expression Parsing Methods (Keep existing implementations) ---
 
     def parse_expression(self):
         return self.parse_comparison()
@@ -492,41 +509,5 @@ class Parser:
               print(f"SyntaxError (L{first_token.line} C{first_token.column}): Invalid target for set/call.", file=sys.stderr)
               sys.exit(1)
          return node
-
-
-# --- Example Usage (Optional: Keep for testing this file) ---
-# def print_ast(node, indent=0):
-#     # (Include the print_ast function here if needed for standalone testing)
-#     # ... implementation ...
-#     pass
-
-# if __name__ == "__main__":
-#     eazy_code_example = """
-#     @main:
-#         int x
-#         set x 10
-#         if x == 10
-#             print x
-#         exit
-#     """
-#     lexer = Lexer(eazy_code_example)
-#     tokens = lexer.tokenize()
-#     print("--- Tokens ---")
-#     for t in tokens: print(t)
-
-#     if tokens and tokens[-1].type == TT_EOF:
-#         parser = Parser(tokens)
-#         try:
-#             ast = parser.parse()
-#             print("\n--- AST ---")
-#             # print_ast(ast) # Requires print_ast definition
-#         except SystemExit:
-#             print("\nParsing failed.")
-#         except Exception as e:
-#             print(f"\nAn unexpected error occurred during parsing: {e}")
-#             import traceback
-#             traceback.print_exc()
-#     else:
-#         print("\nLexing failed or produced no tokens.")
 
 

@@ -1,0 +1,88 @@
+@calculator(int initial_val):
+    # Block to perform a simple calculation: result = initial_val * 2
+    # It can be used via 'image' (capturing .final_result)
+    # or 'call' (returning the result directly).
+
+    int current_val          # Declare local variable
+    set current_val initial_val # Use the input parameter
+
+    int factor               # Declare another local variable
+    set factor 2             # Set its value
+
+    int result               # Declare result variable
+    set result current_val * factor # Perform calculation
+    .final_result            # Bind the result for image snapshots
+
+    # Optional: print result inside the block
+    # print result
+
+    ret result               # Return the result for 'call' usage
+
+@data_processor:
+    # Block to demonstrate struct creation, member access,
+    # and using another block via both 'image' and 'call'.
+
+    # Create a struct instance on the heap
+    struct data_point { int value, int timestamp }
+    set data_point.value 100         # Set struct member value
+    set data_point.timestamp 20250428 # Set another member value
+
+    print data_point.value          # Print a member value (Expected: 100)
+    # Optional: print data_point.timestamp
+
+    # --- Using the 'calculator' block ---
+    int calc_input                   # Variable to hold input for calculator
+    set calc_input data_point.value # Use value from struct
+
+    # 1. Test 'image': Create a snapshot of 'calculator' execution
+    image calc_snap calculator(calc_input)
+    # Access the bound value from the snapshot
+    print calc_snap.final_result     # Expected output: 200 (100 * 2)
+
+    # 2. Test 'call': Execute 'calculator' directly for its return value
+    int call_res                     # Variable to store the returned value
+    call call_res calculator(50)     # Call with a different input value (50)
+    # Print the value returned by 'calculator' via 'ret'
+    print call_res                   # Expected output: 100 (50 * 2)
+
+    # --- Binding for this block ---
+    int status_code                  # Define a status variable
+    set status_code 1                # Set its value
+    .status                          # Bind 'status_code' for images of 'data_processor'
+
+    ret 0 # Add a return for C function signature consistency (could return status_code)
+
+@main:
+    # Main execution block with a simple countdown loop.
+
+    int loop_counter                 # Declare loop counter variable
+    set loop_counter 3               # Initialize counter
+
+    print 999                        # Print a marker indicating start of main
+
+loop_start:                          # Label for the start of the loop
+    # Loop condition check
+    if loop_counter == 0             # Check if counter reached zero
+        goto loop_end                # If zero, jump to loop_end
+
+    print loop_counter               # Print the current counter value (3, 2, 1)
+
+    # Create an image of 'data_processor' inside the loop
+    image dp_snap data_processor
+    # Access the 'status' binding from the 'data_processor' snapshot
+    print dp_snap.status             # Expected output: 1 (repeated in each iteration)
+
+    # Decrement the counter
+    set loop_counter loop_counter - 1
+    goto loop_start                  # Jump back to the beginning of the loop
+
+loop_end:                            # Label marking the end of the loop
+    print 0                          # Print a marker indicating loop finish
+
+    # Example of calling 'calculator' after the loop
+    int final_calc_result            # Variable for final calculation
+    call final_calc_result calculator(1) # Call calculator with input 1
+    print final_calc_result          # Print the result (Expected: 2)
+
+    exit                             # Exit the program
+
