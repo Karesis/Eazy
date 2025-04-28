@@ -38,14 +38,21 @@ Refer to [EazyLaw.md](./EazyLaw.md) for a complete and detailed explanation of t
 
 ## Project Structure
 
-.├── eazy_ast.py       # AST Node definitions├── EazyLaw.md        # Eazy language specification├── generator.py      # CodeGenerator and SymbolTable classes├── leparser.py       # Lexer and Parser classes├── LICENSE           # Project License├── main.py           # Main translator script└── README.md         # This file
+.├── eazy_ast.py       # AST Node definitions
+├── EazyLaw.md        # Eazy language specification
+├── generator.py      # CodeGenerator and SymbolTable classes
+├── leparser.py       # Lexer and Parser classes
+├── LICENSE           # Project License
+├── main.py           # Main translator script
+└── README.md         # This file
+
 ## How to Run
 
 This project requires Python 3 (tested with 3.x).
 
 1.  **Clone the repository (if you haven't already):**
     ```bash
-    git clone <your-repo-url>
+    git clone https://github.com/Karesis/Eazy.git
     cd Eazy
     ```
 2.  **Ensure you have an Eazy source file (e.g., `example.ezy`).**
