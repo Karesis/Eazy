@@ -37,14 +37,16 @@ Refer to [EazyLaw.md](./EazyLaw.md) for a complete and detailed explanation of t
 * **Main Script (`main.py`):** Orchestrates the lexing, parsing, and code generation process.
 
 ## Project Structure
-
-.├── eazy_ast.py       # AST Node definitions
+```
+.
+├── eazy_ast.py       # AST Node definitions
 ├── EazyLaw.md        # Eazy language specification
 ├── generator.py      # CodeGenerator and SymbolTable classes
 ├── leparser.py       # Lexer and Parser classes
 ├── LICENSE           # Project License
 ├── main.py           # Main translator script
 └── README.md         # This file
+```
 
 ## How to Run
 
