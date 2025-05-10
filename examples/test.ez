@@ -1,0 +1,22 @@
+# test_control_flow.ez
+int x
+x = 5
+
+print 100 # (1) 输出: 100
+
+if x > 0 goto thenLabel # (2) x=5, 5>0 为真。跳转到 thenLabel
+# (3) print 200 这条语句因为跳转而被跳过
+
+thenLabel: # (4) 执行流到达这里
+print 300 # (5) 输出: 300
+print 400 # (6) 输出: 400
+
+# (7) x = -2 (x 现在是 -2)
+if x > 0 goto anotherThen # (8) x=-2, -2>0 为假。不跳转。顺序执行下一语句。
+# (9) print 500 这条语句因为条件为假而不跳转，所以被执行。输出: 500
+
+anotherThen: # (10) 执行流顺序到达这里 (从 print 500 之后“掉落”下来)
+print 600 # (11) 输出: 600
+
+print 700 # (12) 输出: 700
+# (13) 程序结束
