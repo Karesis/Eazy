@@ -1,3 +1,17 @@
+# Copyright [2025] [杨亦锋]
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use  1 this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import sys
 import os
 import subprocess
@@ -18,7 +32,7 @@ class MyEazyTreeWalker(EazyLanguageVisitor):
         self.module = ir.Module(name="eazy_module") # 1. 创建 LLVM 模块
 
         # --- 新增/修改代码开始 ---
-        # 1. 初始化 LLVM 的目标信息 (非常重要！)
+        # 1. 初始化 LLVM 的目标信息 
         llvm.initialize()
         llvm.initialize_native_target()   # 初始化本地目标
         llvm.initialize_native_asmprinter() # 初始化本地汇编打印机
