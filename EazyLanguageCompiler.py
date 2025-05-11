@@ -12,13 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
-import os
-import subprocess
-import argparse
-
-from antlr4 import FileStream, CommonTokenStream
-
 from llvmlite import ir
 import llvmlite.binding as llvm
 
@@ -26,12 +19,11 @@ from EazyLepaser.EazyLanguageLexer import EazyLanguageLexer
 from EazyLepaser.EazyLanguageParser import EazyLanguageParser
 from EazyLepaser.EazyLanguageVisitor import EazyLanguageVisitor
 
-class MyEazyTreeWalker(EazyLanguageVisitor):
+class EazyTreeWalker(EazyLanguageVisitor):
     def __init__(self):
         super().__init__()
         self.module = ir.Module(name="eazy_module") # 1. 创建 LLVM 模块
 
-        # --- 新增/修改代码开始 ---
         # 1. 初始化 LLVM 的目标信息 
         llvm.initialize()
         llvm.initialize_native_target()   # 初始化本地目标
@@ -300,150 +292,3 @@ class MyEazyTreeWalker(EazyLanguageVisitor):
             print(f"LLVM代码生成错误: 一元负号的操作数类型不是 i32，而是 {value_to_negate.type}")
             # 可以返回一个默认值或抛出异常
             return ir.Constant(ir.IntType(32), 0) # 简单返回0
-
-def main(argv):
-    # --- 1. 设置命令行参数解析 ---
-    arg_parser = argparse.ArgumentParser(description="EazyLanguage Compiler")
-    arg_parser.add_argument("inputfile", help="EazyLanguage source file (.ez)")
-    arg_parser.add_argument("-o", "--output", help="Specify the output file name/path for the final product.")
-
-    # 创建一个互斥组，因为 --emit-llvm 和 -S (以及默认的生成可执行文件) 是互斥的编译目标阶段
-    output_type_group = arg_parser.add_mutually_exclusive_group()
-    output_type_group.add_argument("-ll", "--emit-llvm", action="store_true", 
-                                   help="Stop after generating LLVM IR (.ll) file.")
-    output_type_group.add_argument("-s", "--emit-asm", action="store_true", # 标准编译器通常用 -S 代表汇编
-                                   help="Stop after generating Assembly (.s) file.")
-    # 如果没有 --emit-llvm 或 -S，则默认尝试生成可执行文件
-
-    args = arg_parser.parse_args(argv[1:]) # 解析参数
-
-    input_file_path = args.inputfile
-    # 从输入文件路径中获取不带后缀的基本文件名，例如 "path/to/myfile.ez" -> "myfile"
-    base_input_name_for_defaults = os.path.splitext(os.path.basename(input_file_path))[0]
-
-    # --- 2. 决定各个阶段的输出文件名 ---
-    # 如果 -o 未指定，我们会根据输入文件名和编译阶段来生成默认的输出文件名
-    
-    # .ll 文件的路径
-    path_ll = ""
-    if args.emit_llvm: # 如果最终目标是 .ll 文件
-        path_ll = args.output if args.output else base_input_name_for_defaults + ".ll"
-    else: # 如果 .ll 只是中间文件
-        path_ll = base_input_name_for_defaults + ".temp.ll" # 用一个临时名字
-
-    # .s 文件的路径
-    path_s = ""
-    if args.emit_asm: # 如果最终目标是 .s 文件
-        path_s = args.output if args.output else base_input_name_for_defaults + ".s"
-    elif not args.emit_llvm: # 如果 .s 是中间文件 (目标是可执行文件)
-        path_s = base_input_name_for_defaults + ".temp.s"
-
-    # 可执行文件的路径
-    path_exe = ""
-    if not args.emit_llvm and not args.emit_asm: # 如果最终目标是可执行文件
-        path_exe = args.output if args.output else base_input_name_for_defaults # Linux/macOS 通常不带后缀
-        if os.name == 'nt' and not path_exe.lower().endswith('.exe'): # Windows 加上 .exe
-            path_exe += '.exe'
-    
-    # --- 3. 执行编译流程 ---
-    llvm_ir_string = ""
-    try:
-        print(f"--- 正在处理 EazyLanguage 文件: {input_file_path} ---")
-        input_stream = FileStream(input_file_path, encoding='utf-8')
-        lexer = EazyLanguageLexer(input_stream)
-        stream = CommonTokenStream(lexer)
-        parser = EazyLanguageParser(stream)
-
-        print("--- 开始解析 ---")
-        tree = parser.program()
-        print("--- 解析成功！ ---")
-
-        print("\n--- 开始用 Visitor 生成 LLVM IR ---")
-        walker = MyEazyTreeWalker() 
-        walker.visit(tree)
-        print("--- Visitor 遍历完成 ---")
-        
-        llvm_ir_string = str(walker.module)
-
-    except Exception as e:
-        print("--- 编译器前端（解析或IR生成）发生错误 ---")
-        print(e)
-        import traceback
-        traceback.print_exc()
-        return # 前端出错，无法继续
-
-    # --- 阶段一：写入 .ll 文件 ---
-    try:
-        # 确保目标目录存在 (如果 path_ll 包含路径的话)
-        output_dir_ll = os.path.dirname(path_ll)
-        if output_dir_ll and not os.path.exists(output_dir_ll):
-            os.makedirs(output_dir_ll)
-            print(f"创建目录: {output_dir_ll}")
-
-        with open(path_ll, "w", encoding='utf-8') as f:
-            f.write(llvm_ir_string)
-        print(f"LLVM IR 已成功保存到文件: {path_ll}")
-    except IOError as e:
-        print(f"错误：无法将 LLVM IR 写入文件 {path_ll}: {e}")
-        return
-
-    if args.emit_llvm:
-        print("编译流程结束 (仅生成 LLVM IR)。")
-        return
-
-    # --- 阶段二：从 .ll 生成 .s (汇编) 文件 ---
-    # 此时 path_s 应该已经被正确设置了 (要么是最终目标，要么是临时文件名)
-    print(f"\n--- 尝试从 '{path_ll}' 生成汇编文件: {path_s} ---")
-    try:
-        subprocess.run(['llc', path_ll, '-o', path_s], check=True)
-        print(f"汇编文件已成功生成: {path_s}")
-    except FileNotFoundError:
-        print("错误: 'llc' 命令未找到。请确保 LLVM 已正确安装并将其可执行文件路径加入到系统的 PATH 环境变量中。")
-        return
-    except subprocess.CalledProcessError as e:
-        print(f"错误: 'llc' 执行失败 (返回码 {e.returncode}): {e}")
-        return
-    
-    # 如果 .ll 是临时文件且不是用户通过-o指定的最终.ll输出，可以考虑删除
-    if path_ll.endswith(".temp.ll") and path_ll != args.output : # 简单判断是否为临时ll
-        try:
-            # print(f"  (清理临时LLVM IR文件: {path_ll})")
-            # os.remove(path_ll) # 注意：自动删除文件需谨慎
-            pass # 暂时不自动删除
-        except OSError as e:
-            print(f"警告：无法删除临时文件 {path_ll}: {e}")
-
-
-    if args.emit_asm:
-        print("编译流程结束 (已生成汇编文件)。")
-        return
-
-    # --- 阶段三：从 .s 生成可执行文件 ---
-    # 此时 path_exe 应该已经被正确设置了
-    print(f"\n--- 尝试从 '{path_s}' 生成可执行文件: {path_exe} ---")
-    cc_command = "gcc" 
-    try:
-        subprocess.run([cc_command, path_s, '-o', path_exe, '-no-pie'], check=True)
-        print(f"可执行文件 '{path_exe}' 已成功生成！你可以尝试运行它。")
-        # 例如在Linux/macOS上: ./{path_exe}
-    except FileNotFoundError:
-        print(f"错误: '{cc_command}' 命令未找到。请确保 C 编译器 (clang 或 gcc) 已正确安装并将其可执行文件路径加入到系统的 PATH 环境变量中。")
-        return
-    except subprocess.CalledProcessError as e:
-        print(f"错误: '{cc_command}' 执行失败 (返回码 {e.returncode}): {e}")
-        return
-
-    # 如果 .s 是临时文件且不是用户通过-o指定的最终.s输出，可以考虑删除
-    if path_s.endswith(".temp.s") and path_s != args.output: # 简单判断是否为临时s
-        try:
-            # print(f"  (清理临时汇编文件: {path_s})")
-            # os.remove(path_s) # 注意：自动删除文件需谨慎
-            pass # 暂时不自动删除
-        except OSError as e:
-            print(f"警告：无法删除临时文件 {path_s}: {e}")
-            
-    print("编译流程结束 (已生成可执行文件)。")
-
-
-if __name__ == '__main__':
-    main(sys.argv)
