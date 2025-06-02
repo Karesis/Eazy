@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>specification_v1.0</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#nyan-语言设计规范-v0.2.1"
+id="toc-nyan-语言设计规范-v0.2.1">Nyan 语言设计规范 (v0.2.1)</a></li>
+</ul>
+</nav>
+<h2 id="nyan-语言设计规范-v0.2.1">Nyan 语言设计规范 (v0.2.1)</h2>
+<h4 id="介绍与设计哲学">1. 介绍与设计哲学</h4>
+<ul>
+<li><strong>语言名称:</strong> Nyan</li>
+<li><strong>编译器名称:</strong> Claw</li>
+<li><strong>核心哲学:</strong>
+<ul>
+<li><strong>简洁与强大:</strong>
+追求最小化的语法和最少的概念，同时提供现代系统级编程的全部力量。Nyan
+拒绝一切不必要的语法符号（如语句末尾的<code>;</code>，<code>if/for</code>后的<code>:</code>，以及<code>{}</code>代码块）。</li>
+<li><strong>安全与掌控:</strong>
+通过所有权系统、借用和<code>unsafe</code>边界，在保证内存安全的同时，给与程序员最终的控制权。</li>
+<li><strong>元信息即类型:</strong> 将<code>type</code>,
+<code>name</code>,
+<code>err</code>等元信息提升为语言的内置基础类型，形成独特且强大的元编程与内省能力。</li>
+<li><strong>一致性:</strong>
+简单的规则贯穿整个语言。例如，下划线<code>_</code>前缀在任何地方都代表“私有”。</li>
+</ul></li>
+</ul>
+<h4 id="词法与核心语法">2. 词法与核心语法</h4>
+<ul>
+<li><p><strong>注释:</strong> 使用 <code>//</code> 进行单行注释。</p>
+<pre class="nyan"><code>// 这是一个注释</code></pre></li>
+<li><p><strong>缩进:</strong>
+严格使用<strong>4个空格</strong>作为一级缩进。缩进是定义代码块的唯一方式。</p></li>
+<li><p><strong>关键字:</strong></p>
+<ul>
+<li>定义: <code>@</code>, <code>trait</code>, <code>struct</code>,
+<code>extern</code>, <code>use</code>, <code>as</code>,
+<code>super</code></li>
+<li>控制流: <code>if</code>, <code>elif</code>, <code>else</code>,
+<code>for</code>, <code>in</code>, <code>match</code>,
+<code>case</code>, <code>default</code>, <code>ret</code></li>
+<li>并发: <code>spawn</code>, <code>chan</code></li>
+<li>元信息与内存: <code>type</code>, <code>name</code>,
+<code>size</code>, <code>count</code>, <code>err</code>,
+<code>move</code>, <code>~</code>, <code>rel</code>,
+<code>unsafe</code></li>
+</ul></li>
+<li><p><strong>操作符:</strong></p>
+<ul>
+<li>并发: <code>&lt;-</code></li>
+<li>错误处理: <code>?</code></li>
+<li>访问: <code>.</code>, <code>::</code></li>
+<li>指针: <code>&amp;</code>, <code>*</code></li>
+<li>其他标准算术与逻辑操作符。</li>
+</ul></li>
+</ul>
+<h4 id="类型与数据模型">3. 类型与数据模型</h4>
+<p>Nyan 的类型系统分为两大类，这是其核心特性。</p>
+<ul>
+<li><p><strong>3.1. 数据类型 (Data Types)</strong></p>
+<ul>
+<li><p><strong>原始类型:</strong> <code>int</code>, <code>float</code>,
+<code>char</code>, <code>bool</code>等。</p></li>
+<li><p><strong>声明语法:</strong> <code>TypeName VariableName</code></p>
+<pre class="nyan"><code>int my_number = 10
+bool is_cat = true</code></pre></li>
+<li><p><strong>指针类型:</strong> 使用 <code>*</code> 后缀，如
+<code>int*</code>。</p></li>
+</ul></li>
+<li><p><strong>3.2. 元信息类型 (Meta-Info Types)</strong>
+这些是语言内置的、用于描述数据和状态的基础类型。</p>
+<ul>
+<li><code>type</code>: 代表一个类型本身。
+<ul>
+<li><strong>字面量:</strong> <code>&lt;TypeName&gt;</code></li>
+<li><strong>示例:</strong> <code>t = &lt;int&gt;</code></li>
+</ul></li>
+<li><code>name</code>: 代表一个标识符的名称。
+<ul>
+<li><strong>字面量:</strong> <code>/identifier/</code></li>
+<li><strong>示例:</strong> <code>n = /my_variable/</code></li>
+</ul></li>
+<li><code>err</code>: 代表一个错误状态。
+<ul>
+<li><strong>构造器:</strong> <code>Err(payload)</code></li>
+<li><strong>示例:</strong> <code>e = Err("File not found")</code></li>
+</ul></li>
+<li><code>size</code>:
+代表物理内存大小，其具体位数与目标机器架构相关。</li>
+<li><code>count</code>: 代表逻辑元素的数量。</li>
+</ul></li>
+<li><p><strong>3.3. 内置元信息操作符</strong>
+用于从数据中提取元信息。</p>
+<ul>
+<li><code>type(expr)</code>: 获取表达式的类型。</li>
+<li><code>size(expr)</code>: 获取表达式类型占用的内存大小。</li>
+<li><code>count(expr)</code>: 获取复合类型（如 <code>@block</code>
+实例）的成员数量。</li>
+<li><code>name(expr)</code>: 获取变量或定义的名称。</li>
+</ul>
+<pre class="nyan"><code>@Point(int x, int y)
+    .x
+    .y
+
+@main
+    p = Point(10, 20)
+    p_type = type(p)   // p_type 的值是 &lt;Point&gt;
+    p_size = size(p)   // 结果是 2 * size(int)
+    p_count = count(p) // 结果是 2</code></pre></li>
+</ul>
+<h4 id="block-统一对象系统">4. <code>@block</code> 统一对象系统</h4>
+<p><code>@block</code> 是 Nyan 中定义函数、类、方法等的唯一构造。</p>
+<ul>
+<li><p><strong>定义与实例化:</strong></p>
+<pre class="nyan"><code>// 定义一个 Point 类及其构造器
+@Point(int x, int y)
+    .x // .x 将参数 x 绑定为公开数据成员
+    .y
+
+@main
+    // 实例化 Point，语法和函数调用一致
+    p = Point(10, 20)
+    print(p.x) // -&gt; 10</code></pre></li>
+<li><p><strong>方法与状态访问:</strong></p>
+<pre class="nyan"><code>@Counter(int initial_value)
+    .count = initial_value // 也可以绑定一个可变的内部状态
+
+    // 定义一个方法
+    @increment()
+        .count = .count + 1 // 使用 .count 访问和修改成员状态
+
+@main
+    c = Counter(5)
+    c.increment()
+    print(c.count) // -&gt; 6</code></pre></li>
+<li><p><strong>私有性:</strong> <code>_</code>
+前缀的成员或方法是私有的。</p></li>
+<li><p><strong>无参调用:</strong> 无参数的块或方法，调用时
+<code>()</code> 可选。</p></li>
+<li><p><strong>继承:</strong></p>
+<pre class="nyan"><code>// Parent 是一个已定义的 @block
+@Child(int a, int b) : Parent
+    super(a) // 调用父类的构造器
+    .b = b   // 绑定自己的成员</code></pre></li>
+</ul>
+<h4 id="内存与所有权模型">5. 内存与所有权模型</h4>
+<ol type="1">
+<li><strong>所有权:</strong> 内存分配（如 <code>malloc</code>
+的结果）归属于创建它的块。块跟踪的是<strong>内存分配本身</strong>。</li>
+<li><strong>自动释放:</strong> 块结束时，自动释放其拥有的所有内存。</li>
+<li><strong>借用:</strong>
+默认情况下，向函数传递指针是<strong>借用</strong>，不转移所有权。</li>
+<li><strong>所有权转移 (<code>move</code>):</strong>
+<ul>
+<li><code>ret ptr</code>: 返回指针会转移所有权。</li>
+<li><code>move p</code> (或 <code>~p</code>): 在函数调用中，显式将
+<code>p</code> 的所有权移入函数。</li>
+</ul></li>
+</ol>
+<h4 id="错误处理与控制流">6. 错误处理与控制流</h4>
+<ul>
+<li><p><strong>隐式双通道返回:</strong> 任何 <code>@block</code>
+的返回值都是一个隐式的 <code>T | err</code> 联合体。函数签名
+<code>-&gt; &lt;T&gt;</code> 只需声明成功类型。</p></li>
+<li><p><strong>错误传播 (<code>?</code>):</strong></p>
+<pre class="nyan"><code>@main
+    // read_file 可能返回 str 或 err
+    // 如果是 err，? 会让 @main 立即返回这个 err
+    content = read_file(&quot;path&quot;)?</code></pre></li>
+<li><p><strong><code>match</code> 与类型模式:</strong></p>
+<pre class="nyan"><code>match read_file(&quot;path&quot;)
+    case str content
+        print(&quot;成功: {content}&quot;)
+    case Err e
+        print(&quot;失败: {e.message}&quot;)
+    default // 可选的默认分支
+        print(&quot;发生了未知类型的错误&quot;)</code></pre></li>
+</ul>
+<h4 id="泛型与-trait-系统">7. 泛型与 Trait 系统</h4>
+<ul>
+<li><p><strong>泛型定义:</strong>
+<code>@Name&lt;T, K&gt;</code></p></li>
+<li><p><strong>泛型实例化:</strong>
+<code>Name&lt;int, str&gt;(arg1, arg2)</code></p></li>
+<li><p><strong>Trait (契约定义):</strong></p>
+<pre class="nyan"><code>trait Comparable
+    // 要求实现者必须支持 &#39;&gt;&#39; 操作符
+    @&gt;(other) -&gt; bool</code></pre></li>
+<li><p><strong>Trait 实现:</strong></p>
+<pre class="nyan"><code>@MyNumber(int value) : Comparable
+    .value
+    @&gt;(other: MyNumber) -&gt; bool
+        ret .value &gt; other.value</code></pre></li>
+<li><p><strong>泛型约束 (<code>where</code>):</strong></p>
+<pre class="nyan"><code>@sort&lt;T&gt;(List&lt;T&gt; list) where T : Comparable</code></pre></li>
+</ul>
+<h4 id="并发模型">8. 并发模型</h4>
+<ul>
+<li><strong>原语:</strong> <code>spawn</code>, <code>chan</code>,
+<code>&lt;-</code></li>
+<li><strong>启动 Actor:</strong> <code>spawn my_actor()</code></li>
+<li><strong>通道声明与创建:</strong> <code>chan my_chan: int</code></li>
+<li><strong>通信:</strong> <code>my_chan &lt;- 42</code> (发送),
+<code>value = (&lt;-my_chan)?</code> (接收)</li>
+<li><strong>生命周期:</strong>
+通道变量离开作用域时，通道被<strong>自动关闭</strong>。</li>
+</ul>
+<h4 id="模块化系统">9. 模块化系统</h4>
+<ul>
+<li><p><strong>规则:</strong> 一文件一模块，<code>_</code>
+前缀为私有。</p></li>
+<li><p><strong><code>use</code> 语法:</strong></p>
+<pre class="nyan"><code>// 导入特定成员，并支持重命名和多行
+use my_lib::
+    JSONParser as Parser,
+    encode as to_json
+
+// 导入所有
+use my_other_lib::*</code></pre></li>
+</ul>
+<h4 id="外部函数接口-ffi">10. 外部函数接口 (FFI)</h4>
+<ul>
+<li><p><strong><code>extern C</code> 块:</strong>
+用于声明C语言接口。</p></li>
+<li><p><strong><code>struct</code> 定义:</strong> 在
+<code>extern C</code> 块内使用 <code>struct</code>
+定义C兼容的内存布局。</p></li>
+<li><p><strong><code>unsafe</code> 块:</strong> 所有 FFI 调用都必须在
+<code>unsafe</code> 块中。</p></li>
+<li><p><strong><code>rel</code> 操作符:</strong> 在 <code>unsafe</code>
+块中，使用 <code>rel ptr</code> 来解除 Nyan
+对指针的所有权管理，以便安全地传递给C。</p>
+<pre class="nyan"><code>extern C
+    struct C_Point { int x; int y }
+    draw(C_Point* p)
+
+@main
+    p_nyan = Point(1, 2)
+    p_c = C_Point(p_nyan.x, p_nyan.y)
+    unsafe
+        draw(&amp;p_c)</code></pre></li>
+</ul>
+<h4 id="标准库哲学">11. 标准库哲学</h4>
+<ul>
+<li><strong>定位:</strong>
+提供一套精心策划的、跨领域通用的<strong>核心工具集</strong>，杜绝“重复劳动”，但不追求“大而全”。</li>
+<li><strong>核心模块 (提案):</strong> <code>io</code>, <code>os</code>,
+<code>collections</code>, <code>math</code>, <code>string</code>,
+<code>error</code>。</li>
+<li><strong>实现方式:</strong> 标准库将大量使用 Nyan 的高级特性（如
+Trait 和泛型）来构建。例如，<code>io.print</code> 的实现将基于一个
+<code>Display</code> trait。</li>
+</ul>
+</body>
+</html>

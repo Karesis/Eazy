@@ -1,0 +1,10 @@
+// examples/test.nyan
+
+@main
+    int x = 10
+    int y = 20
+    
+    if x > y
+        print("x is greater")
+    else
+        print("y is greater or equal")

@@ -1,4 +1,4 @@
-### Nyan 语言设计规范 (v1.0)
+## Nyan 语言设计规范 (v0.2.1)
 
 #### 1. 介绍与设计哲学
 
@@ -13,6 +13,7 @@
 #### 2. 词法与核心语法
 
 * **注释:** 使用 `//` 进行单行注释。
+
     ```nyan
     // 这是一个注释
     ```
@@ -21,7 +22,7 @@
     * 定义: `@`, `trait`, `struct`, `extern`, `use`, `as`, `super`
     * 控制流: `if`, `elif`, `else`, `for`, `in`, `match`, `case`, `default`, `ret`
     * 并发: `spawn`, `chan`
-    * 元信息与内存: `type`, `name`, `size`, `count`, `err`, `move`, `~`, `rel`, `unsafe`
+    * 元信息与内存: `type`, `name`, `size`, `count`, `err`, `~`, `rel`, `unsafe`
 * **操作符:**
     * 并发: `<-`
     * 错误处理: `?`
@@ -36,6 +37,7 @@ Nyan 的类型系统分为两大类，这是其核心特性。
 * **3.1. 数据类型 (Data Types)**
     * **原始类型:** `int`, `float`, `char`, `bool`等。
     * **声明语法:** `TypeName VariableName`
+
         ```nyan
         int my_number = 10
         bool is_cat = true
@@ -47,13 +49,12 @@ Nyan 的类型系统分为两大类，这是其核心特性。
 
     * `type`: 代表一个类型本身。
         * **字面量:** `<TypeName>`
-        * **示例:** `t = <int>`
     * `name`: 代表一个标识符的名称。
         * **字面量:** `/identifier/`
-        * **示例:** `n = /my_variable/`
     * `err`: 代表一个错误状态。
         * **构造器:** `Err(payload)`
         * **示例:** `e = Err("File not found")`
+        * 所有err都有统一的type: <err>
     * `size`: 代表物理内存大小，其具体位数与目标机器架构相关。
     * `count`: 代表逻辑元素的数量。
 
@@ -81,6 +82,7 @@ Nyan 的类型系统分为两大类，这是其核心特性。
 `@block` 是 Nyan 中定义函数、类、方法等的唯一构造。
 
 * **定义与实例化:**
+
     ```nyan
     // 定义一个 Point 类及其构造器
     @Point(int x, int y)
@@ -93,6 +95,7 @@ Nyan 的类型系统分为两大类，这是其核心特性。
         print(p.x) // -> 10
     ```
 * **方法与状态访问:**
+
     ```nyan
     @Counter(int initial_value)
         .count = initial_value // 也可以绑定一个可变的内部状态
@@ -109,6 +112,7 @@ Nyan 的类型系统分为两大类，这是其核心特性。
 * **私有性:** `_` 前缀的成员或方法是私有的。
 * **无参调用:** 无参数的块或方法，调用时 `()` 可选。
 * **继承:**
+
     ```nyan
     // Parent 是一个已定义的 @block
     @Child(int a, int b) : Parent
@@ -123,12 +127,14 @@ Nyan 的类型系统分为两大类，这是其核心特性。
 3.  **借用:** 默认情况下，向函数传递指针是**借用**，不转移所有权。
 4.  **所有权转移 (`move`):**
     * `ret ptr`: 返回指针会转移所有权。
-    * `move p` (或 `~p`): 在函数调用中，显式将 `p` 的所有权移入函数。
+    * `~p` : 在函数调用中，显式将 `p` 的所有权移入函数。
+    * 如果是结构体等，ret 和 ~都会将所有附带的所有权全部转移(所有权是深转移的)
 
 #### 6. 错误处理与控制流
 
 * **隐式双通道返回:** 任何 `@block` 的返回值都是一个隐式的 `T | err` 联合体。函数签名 `-> <T>` 只需声明成功类型。
 * **错误传播 (`?`):**
+
     ```nyan
     @main
         // read_file 可能返回 str 或 err
@@ -136,27 +142,32 @@ Nyan 的类型系统分为两大类，这是其核心特性。
         content = read_file("path")?
     ```
 * **`match` 与类型模式:**
+
     ```nyan
     match read_file("path")
-        case str content
+        case content
             print("成功: {content}")
-        case Err e
+        case e
             print("失败: {e.message}")
         default // 可选的默认分支
             print("发生了未知类型的错误")
     ```
+    
+    * 由于存在`type`类型，编译器会自行检查content( <str> )和 e ( <err> )
 
 #### 7. 泛型与 Trait 系统
 
 * **泛型定义:** `@Name<T, K>`
 * **泛型实例化:** `Name<int, str>(arg1, arg2)`
 * **Trait (契约定义):**
+
     ```nyan
     trait Comparable
         // 要求实现者必须支持 '>' 操作符
         @>(other) -> bool
     ```
 * **Trait 实现:**
+
     ```nyan
     @MyNumber(int value) : Comparable
         .value
@@ -164,6 +175,7 @@ Nyan 的类型系统分为两大类，这是其核心特性。
             ret .value > other.value
     ```
 * **泛型约束 (`where`):**
+
     ```nyan
     @sort<T>(List<T> list) where T : Comparable
     ```
@@ -180,6 +192,7 @@ Nyan 的类型系统分为两大类，这是其核心特性。
 
 * **规则:** 一文件一模块，`_` 前缀为私有。
 * **`use` 语法:**
+
     ```nyan
     // 导入特定成员，并支持重命名和多行
     use my_lib::
@@ -196,6 +209,7 @@ Nyan 的类型系统分为两大类，这是其核心特性。
 * **`struct` 定义:** 在 `extern C` 块内使用 `struct` 定义C兼容的内存布局。
 * **`unsafe` 块:** 所有 FFI 调用都必须在 `unsafe` 块中。
 * **`rel` 操作符:** 在 `unsafe` 块中，使用 `rel ptr` 来解除 Nyan 对指针的所有权管理，以便安全地传递给C。
+
     ```nyan
     extern C
         struct C_Point { int x; int y }
